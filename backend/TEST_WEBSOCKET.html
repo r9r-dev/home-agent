@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Home Agent WebSocket Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        .connected {
+            background: #d4edda;
+            color: #155724;
+        }
+        .disconnected {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        .input-group {
+            margin: 20px 0;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input, textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        textarea {
+            min-height: 100px;
+            font-family: monospace;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-right: 10px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        button:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+        }
+        .response {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-left: 4px solid #007bff;
+            border-radius: 4px;
+            white-space: pre-wrap;
+            font-family: monospace;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .log {
+            margin-top: 20px;
+            padding: 15px;
+            background: #222;
+            color: #0f0;
+            font-family: monospace;
+            font-size: 12px;
+            border-radius: 4px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .log-entry {
+            margin: 2px 0;
+        }
+        .error {
+            color: #ff5555;
+        }
+        .success {
+            color: #50fa7b;
+        }
+        .info {
+            color: #8be9fd;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Home Agent WebSocket Test</h1>
+
+        <div id="status" class="status disconnected">Disconnected</div>
+
+        <div class="input-group">
+            <label for="wsUrl">WebSocket URL:</label>
+            <input type="text" id="wsUrl" value="ws://localhost:8080/ws">
+        </div>
+
+        <div class="input-group">
+            <label for="sessionId">Session ID (optional):</label>
+            <input type="text" id="sessionId" placeholder="Leave empty for new session">
+        </div>
+
+        <div class="input-group">
+            <label for="message">Message to Claude:</label>
+            <textarea id="message" placeholder="Type your message here...">Hello Claude! Can you tell me what you can help me with?</textarea>
+        </div>
+
+        <div>
+            <button id="connectBtn">Connect</button>
+            <button id="sendBtn" disabled>Send Message</button>
+            <button id="historyBtn" disabled>Get History</button>
+            <button id="clearBtn">Clear Response</button>
+            <button id="disconnectBtn" disabled>Disconnect</button>
+        </div>
+
+        <div id="response" class="response" style="display:none;"></div>
+
+        <h3>Logs</h3>
+        <div id="log" class="log"></div>
+    </div>
+
+    <script>
+        let ws = null;
+        let currentSessionId = null;
+
+        const statusEl = document.getElementById('status');
+        const wsUrlEl = document.getElementById('wsUrl');
+        const sessionIdEl = document.getElementById('sessionId');
+        const messageEl = document.getElementById('message');
+        const responseEl = document.getElementById('response');
+        const logEl = document.getElementById('log');
+        const connectBtn = document.getElementById('connectBtn');
+        const sendBtn = document.getElementById('sendBtn');
+        const historyBtn = document.getElementById('historyBtn');
+        const clearBtn = document.getElementById('clearBtn');
+        const disconnectBtn = document.getElementById('disconnectBtn');
+
+        function log(message, type = 'info') {
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            const timestamp = new Date().toLocaleTimeString();
+            entry.textContent = `[${timestamp}] ${message}`;
+            logEl.appendChild(entry);
+            logEl.scrollTop = logEl.scrollHeight;
+        }
+
+        function updateStatus(connected) {
+            if (connected) {
+                statusEl.textContent = 'Connected';
+                statusEl.className = 'status connected';
+                connectBtn.disabled = true;
+                disconnectBtn.disabled = false;
+                sendBtn.disabled = false;
+                historyBtn.disabled = false;
+            } else {
+                statusEl.textContent = 'Disconnected';
+                statusEl.className = 'status disconnected';
+                connectBtn.disabled = false;
+                disconnectBtn.disabled = true;
+                sendBtn.disabled = true;
+                historyBtn.disabled = true;
+            }
+        }
+
+        function connect() {
+            const url = wsUrlEl.value;
+            log(`Connecting to ${url}...`, 'info');
+
+            ws = new WebSocket(url);
+
+            ws.onopen = () => {
+                log('Connected successfully!', 'success');
+                updateStatus(true);
+            };
+
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                log(`Received: ${data.type}`, 'info');
+
+                switch (data.type) {
+                    case 'chunk':
+                        responseEl.style.display = 'block';
+                        responseEl.textContent += data.content;
+                        break;
+
+                    case 'session_id':
+                        currentSessionId = data.sessionId;
+                        sessionIdEl.value = data.sessionId;
+                        log(`Session ID: ${data.sessionId}`, 'success');
+                        break;
+
+                    case 'done':
+                        log('Response complete', 'success');
+                        if (data.sessionId) {
+                            currentSessionId = data.sessionId;
+                            sessionIdEl.value = data.sessionId;
+                        }
+                        break;
+
+                    case 'error':
+                        log(`Error: ${data.error}`, 'error');
+                        responseEl.style.display = 'block';
+                        responseEl.textContent += `\n\nERROR: ${data.error}`;
+                        break;
+
+                    case 'pong':
+                        log('Pong received', 'info');
+                        break;
+
+                    case 'history':
+                        log(`History: ${data.messages.length} messages`, 'success');
+                        responseEl.style.display = 'block';
+                        responseEl.textContent = JSON.stringify(data.messages, null, 2);
+                        break;
+                }
+            };
+
+            ws.onerror = (error) => {
+                log(`WebSocket error: ${error}`, 'error');
+            };
+
+            ws.onclose = () => {
+                log('Connection closed', 'info');
+                updateStatus(false);
+                ws = null;
+            };
+        }
+
+        function disconnect() {
+            if (ws) {
+                ws.close();
+            }
+        }
+
+        function sendMessage() {
+            if (!ws) return;
+
+            const message = {
+                type: 'message',
+                content: messageEl.value,
+                sessionId: sessionIdEl.value || undefined
+            };
+
+            log(`Sending message: ${messageEl.value.substring(0, 50)}...`, 'info');
+            responseEl.textContent = '';
+            responseEl.style.display = 'block';
+
+            ws.send(JSON.stringify(message));
+        }
+
+        function getHistory() {
+            if (!ws) return;
+
+            const sessionId = sessionIdEl.value;
+            if (!sessionId) {
+                alert('Please enter a session ID');
+                return;
+            }
+
+            const message = {
+                type: 'history',
+                sessionId: sessionId
+            };
+
+            log(`Requesting history for session: ${sessionId}`, 'info');
+            ws.send(JSON.stringify(message));
+        }
+
+        function clearResponse() {
+            responseEl.textContent = '';
+            responseEl.style.display = 'none';
+        }
+
+        connectBtn.onclick = connect;
+        disconnectBtn.onclick = disconnect;
+        sendBtn.onclick = sendMessage;
+        historyBtn.onclick = getHistory;
+        clearBtn.onclick = clearResponse;
+
+        // Send message on Ctrl+Enter
+        messageEl.addEventListener('keydown', (e) => {
+            if (e.ctrlKey && e.key === 'Enter') {
+                sendMessage();
+            }
+        });
+
+        log('Test client loaded. Click Connect to start.', 'info');
+    </script>
+</body>
+</html>

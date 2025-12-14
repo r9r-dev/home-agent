@@ -1,0 +1,47 @@
+# Git
+.git
+.gitignore
+
+# Dependencies
+frontend/node_modules
+backend/vendor
+
+# Build outputs
+frontend/dist
+backend/home-agent
+backend/home-agent-server
+backend/*.exe
+
+# Data
+data/*.db
+data/*.db-shm
+data/*.db-wal
+
+# Environment
+.env
+.env.local
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Documentation (not needed in image)
+*.md
+docs/
+
+# Tests
+*_test.go
+*.test
+
+# Scripts (not needed in image)
+*.sh

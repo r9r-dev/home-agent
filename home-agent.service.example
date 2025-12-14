@@ -1,0 +1,60 @@
+# Systemd service file for Home Agent
+# Installation:
+# 1. Copy this file: sudo cp home-agent.service.example /etc/systemd/system/home-agent.service
+# 2. Edit the file to match your setup
+# 3. Reload systemd: sudo systemctl daemon-reload
+# 4. Enable service: sudo systemctl enable home-agent
+# 5. Start service: sudo systemctl start home-agent
+# 6. Check status: sudo systemctl status home-agent
+
+[Unit]
+Description=Home Agent - Claude Code Interface
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+
+# User and group to run the service as
+# Create a dedicated user: sudo useradd -r -s /bin/false homeagent
+User=homeagent
+Group=homeagent
+
+# Working directory (adjust to your installation path)
+WorkingDirectory=/opt/home-agent/backend
+
+# Path to the binary
+ExecStart=/opt/home-agent/backend/home-agent
+
+# Environment variables
+Environment="PORT=8080"
+Environment="HOST=localhost"
+# For production, use systemd EnvironmentFile instead:
+# EnvironmentFile=/etc/home-agent/.env
+
+# Restart policy
+Restart=always
+RestartSec=10s
+
+# Resource limits
+LimitNOFILE=65535
+
+# Security hardening
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/home-agent/backend
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=home-agent
+
+# Process
+KillMode=mixed
+KillSignal=SIGTERM
+TimeoutStopSec=30s
+
+[Install]
+WantedBy=multi-user.target
