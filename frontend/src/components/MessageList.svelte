@@ -125,7 +125,7 @@
   {#if messages.length === 0}
     <div class="empty-state">
       <h1 class="hero-title">Le majordome de votre infrastructure</h1>
-      <p class="hero-subtitle">Gerez vos machines, serveurs et containers par la conversation.</p>
+      <p class="hero-subtitle">Gérez vos machines, serveurs et containers par la conversation.</p>
     </div>
   {:else}
     {#each messages as message (message.id)}
