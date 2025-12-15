@@ -166,6 +166,26 @@ func (sm *SessionManager) DeleteSession(sessionID string) error {
 	return nil
 }
 
+// UpdateClaudeSessionID updates the Claude CLI session ID for a session
+func (sm *SessionManager) UpdateClaudeSessionID(sessionID, claudeSessionID string) error {
+	if err := sm.db.UpdateClaudeSessionID(sessionID, claudeSessionID); err != nil {
+		return fmt.Errorf("failed to update claude session id: %w", err)
+	}
+	return nil
+}
+
+// GetClaudeSessionIDFromDB gets the Claude session ID from the database
+func (sm *SessionManager) GetClaudeSessionIDFromDB(sessionID string) (string, error) {
+	session, err := sm.db.GetSession(sessionID)
+	if err != nil {
+		return "", fmt.Errorf("failed to get session: %w", err)
+	}
+	if session == nil {
+		return "", fmt.Errorf("session not found: %s", sessionID)
+	}
+	return session.ClaudeSessionID, nil
+}
+
 // GenerateTitle generates a title from the first user message (max 50 chars)
 func GenerateTitle(content string) string {
 	// Remove newlines and extra spaces

@@ -63,8 +63,8 @@
 
 <aside class="sidebar">
   <div class="sidebar-header">
-    <button class="new-chat-btn" on:click={onNewConversation}>
-      + Nouvelle conversation
+    <button class="new-chat-btn" on:click={onNewConversation} title="Nouvelle conversation">
+      +
     </button>
   </div>
 
@@ -114,16 +114,20 @@
   }
 
   .new-chat-btn {
-    width: 100%;
-    padding: 0.75rem 1rem;
+    width: 36px;
+    height: 36px;
+    padding: 0;
     background: var(--color-bg-tertiary);
     border: 1px solid var(--color-border);
     border-radius: 6px;
     color: var(--color-text-primary);
-    font-size: 0.875rem;
+    font-size: 1.25rem;
     cursor: pointer;
     transition: all 0.15s ease;
     font-family: var(--font-family-mono);
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
 
   .new-chat-btn:hover {
