@@ -7,8 +7,9 @@
   import InputBox from './InputBox.svelte';
   import Sidebar from './Sidebar.svelte';
 
-  // App version
-  const APP_VERSION = '0.5.0';
+  // App version (injected by Vite from package.json)
+  declare const __APP_VERSION__: string;
+  const APP_VERSION = __APP_VERSION__;
 
   // Sidebar reference for refreshing
   let sidebar: { refresh: () => void };
