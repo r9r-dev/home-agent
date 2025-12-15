@@ -46,23 +46,19 @@ RUN apk add --no-cache ca-certificates tzdata curl
 # Install Claude Code CLI via npm
 RUN npm install -g @anthropic-ai/claude-code
 
-# Create non-root user
-RUN addgroup -g 1000 homeagent && \
-    adduser -D -u 1000 -G homeagent homeagent
-
-# Create directories
+# Create directories (use existing 'node' user from node:alpine image)
 RUN mkdir -p /app /data /workspace && \
-    chown -R homeagent:homeagent /app /data /workspace
+    chown -R node:node /app /data /workspace
 
 # Set working directory
 WORKDIR /app
 
 # Copy binary from builder
-COPY --from=backend-builder --chown=homeagent:homeagent /app/home-agent ./
-COPY --from=backend-builder --chown=homeagent:homeagent /app/public ./public
+COPY --from=backend-builder --chown=node:node /app/home-agent ./
+COPY --from=backend-builder --chown=node:node /app/public ./public
 
 # Switch to non-root user
-USER homeagent
+USER node
 
 # Expose port
 EXPOSE 8080
