@@ -138,19 +138,23 @@ export class WebSocketService {
   /**
    * Send a message to the server
    */
-  sendMessage(content: string): void {
+  sendMessage(content: string, sessionId?: string): void {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       console.error('[WebSocket] Cannot send message: not connected');
       throw new Error('WebSocket is not connected');
     }
 
-    const message = {
+    const message: { type: string; content: string; sessionId?: string } = {
       type: 'message',
       content,
     };
 
+    if (sessionId) {
+      message.sessionId = sessionId;
+    }
+
     this.ws.send(JSON.stringify(message));
-    console.log('[WebSocket] Message sent');
+    console.log('[WebSocket] Message sent (sessionId:', sessionId || 'none', ')');
   }
 
   /**

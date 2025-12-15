@@ -68,6 +68,21 @@ func (cs *ClaudeService) SetTimeout(timeout time.Duration) {
 	cs.timeout = timeout
 }
 
+// System prompt for Home Agent
+const systemPrompt = `You are a system administrator assistant running on a home server infrastructure.
+You have access to the command line and can execute commands to help manage and monitor the systems.
+Your role is to help with:
+- Server administration and maintenance
+- Container management (Docker)
+- System monitoring and troubleshooting
+- Network configuration
+- Security audits and hardening
+- Backup and recovery operations
+
+You are NOT in a development environment. You are managing production home infrastructure.
+Be careful with destructive commands and always confirm before making significant changes.
+Respond in the same language as the user.`
+
 // ExecuteClaude executes the Claude Code CLI and streams the response
 // If sessionID is provided, it resumes the existing session
 func (cs *ClaudeService) ExecuteClaude(ctx context.Context, prompt string, sessionID string) (<-chan ClaudeResponse, error) {
@@ -77,7 +92,13 @@ func (cs *ClaudeService) ExecuteClaude(ctx context.Context, prompt string, sessi
 	ctx, cancel := context.WithTimeout(ctx, cs.timeout)
 
 	// Build command arguments
-	args := []string{"-p", prompt, "--output-format", "stream-json", "--verbose", "--model", "haiku"}
+	args := []string{
+		"-p", prompt,
+		"--output-format", "stream-json",
+		"--verbose",
+		"--model", "sonnet",
+		"--system-prompt", systemPrompt,
+	}
 
 	// Add resume flag if session ID is provided
 	if sessionID != "" {

@@ -52,8 +52,19 @@
     }
   }
 
+  /**
+   * Focus the textarea (exported for parent components)
+   */
+  export function focus() {
+    if (textarea) {
+      textarea.focus();
+    }
+  }
+
   onMount(() => {
     autoResize();
+    // Auto-focus on mount
+    focus();
   });
 </script>
 

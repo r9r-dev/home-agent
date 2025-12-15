@@ -86,6 +86,9 @@
     chatStore.setError('Connection error. Please check your network.');
   }
 
+  // Reference to InputBox for focus management
+  let inputBox: { focus: () => void };
+
   /**
    * Send a message
    */
@@ -98,8 +101,8 @@
       // Add user message to chat
       chatStore.addMessage('user', content);
 
-      // Send to server
-      websocketService.sendMessage(content);
+      // Send to server with session ID for continuity
+      websocketService.sendMessage(content, state.currentSessionId || undefined);
 
       // Clear any previous errors
       chatStore.setError(null);
@@ -107,6 +110,11 @@
       console.error('[ChatWindow] Failed to send message:', error);
       chatStore.setError('Failed to send message. Please try again.');
     }
+  }
+
+  // Re-focus input when response is complete
+  $: if (!$chatStore.isTyping && inputBox) {
+    inputBox.focus();
   }
 
   /**
@@ -180,7 +188,7 @@
 
   <MessageList messages={state.messages} isTyping={state.isTyping} />
 
-  <InputBox onSend={handleSendMessage} disabled={!state.isConnected || state.isTyping} />
+  <InputBox bind:this={inputBox} onSend={handleSendMessage} disabled={!state.isConnected || state.isTyping} />
 </div>
 
 <style>
