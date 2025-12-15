@@ -6,6 +6,7 @@
 |----------|-------------|
 | [development.md](development.md) | Development setup and workflow |
 | [docker.md](docker.md) | Docker deployment and CI/CD |
+| [self-hosted-runner.md](self-hosted-runner.md) | Self-hosted GitHub Actions runner setup |
 | [deployment.md](deployment.md) | Production deployment (systemd, nginx) |
 | [claude-proxy.md](claude-proxy.md) | Claude Proxy service for host execution |
 | [architecture.md](architecture.md) | Technical architecture and design |

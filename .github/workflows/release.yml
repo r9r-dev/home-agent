@@ -17,7 +17,7 @@ jobs:
   # Build Claude Proxy binaries
   build-proxy:
     name: Build Claude Proxy (${{ matrix.os }}-${{ matrix.arch }})
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     strategy:
       matrix:
         include:
@@ -65,7 +65,7 @@ jobs:
   # Build and push Docker image
   build-docker:
     name: Build Docker Image
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -102,14 +102,19 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=local,src=/tmp/.buildx-cache
+          cache-to: type=local,dest=/tmp/.buildx-cache-new,mode=max
+
+      - name: Move cache
+        run: |
+          rm -rf /tmp/.buildx-cache
+          mv /tmp/.buildx-cache-new /tmp/.buildx-cache
 
   # Create GitHub Release with all artifacts
   release:
     name: Create Release
     needs: [build-proxy, build-docker]
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
