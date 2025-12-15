@@ -331,6 +331,12 @@ install() {
     fi
     info "Version to install: ${version}"
 
+    # Stop service if running (to allow binary replacement)
+    if systemctl is-active --quiet "${SERVICE_NAME}" 2>/dev/null; then
+        info "Stopping service for upgrade..."
+        systemctl stop "${SERVICE_NAME}"
+    fi
+
     # Install binary
     install_binary "$version"
 
