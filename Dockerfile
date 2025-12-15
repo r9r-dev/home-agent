@@ -21,8 +21,8 @@ FROM golang:1.21-alpine AS backend-builder
 
 WORKDIR /app
 
-# Install build dependencies
-RUN apk add --no-cache git
+# Install build dependencies (including CGO for sqlite)
+RUN apk add --no-cache git gcc musl-dev sqlite-dev
 
 # Copy go mod files
 COPY backend/go.* ./
@@ -34,14 +34,14 @@ COPY backend/ ./
 # Copy built frontend from previous stage
 COPY --from=frontend-builder /app/backend/public ./public
 
-# Build backend binary
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o home-agent .
+# Build backend binary (CGO required for sqlite)
+RUN CGO_ENABLED=1 GOOS=linux go build -ldflags="-s -w" -o home-agent .
 
 # Stage 3: Runtime image (Node.js for Claude CLI)
 FROM node:20-alpine
 
-# Install runtime dependencies
-RUN apk add --no-cache ca-certificates tzdata curl
+# Install runtime dependencies (sqlite for database)
+RUN apk add --no-cache ca-certificates tzdata curl sqlite-libs
 
 # Install Claude Code CLI via npm
 RUN npm install -g @anthropic-ai/claude-code
