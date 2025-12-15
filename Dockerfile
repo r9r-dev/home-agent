@@ -37,16 +37,14 @@ COPY --from=frontend-builder /app/backend/public ./public
 # Build backend binary
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o home-agent .
 
-# Stage 3: Runtime image
-FROM alpine:latest
+# Stage 3: Runtime image (Node.js for Claude CLI)
+FROM node:20-alpine
 
 # Install runtime dependencies
 RUN apk add --no-cache ca-certificates tzdata curl
 
-# Install Claude Code CLI
-# Note: Replace with actual Claude Code installation method
-RUN curl -fsSL https://claude.ai/cli/install.sh | sh || \
-    echo "Claude CLI installation placeholder - update with actual installation"
+# Install Claude Code CLI via npm
+RUN npm install -g @anthropic-ai/claude-code
 
 # Create non-root user
 RUN addgroup -g 1000 homeagent && \
