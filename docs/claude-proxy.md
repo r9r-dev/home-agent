@@ -42,6 +42,31 @@ Install or update Claude Proxy with a single command:
 curl -fsSL https://raw.githubusercontent.com/r9r-dev/home-agent/main/claude-proxy/install.sh | sudo bash
 ```
 
+The installer will:
+1. Download and install the binary to `/opt/claude-proxy/`
+2. Generate a secure API key automatically
+3. Configure and start the systemd service
+4. Display the configuration to use for Home Agent
+
+At the end of installation, you'll see:
+
+```
+  ╔═══════════════════════════════════════════════════════════════╗
+  ║           Home Agent Configuration                            ║
+  ╚═══════════════════════════════════════════════════════════════╝
+
+  Add these environment variables to your Home Agent container:
+
+  ┌─────────────────────────────────────────────────────────────┐
+  │  CLAUDE_PROXY_URL=http://192.168.1.100:9090
+  │  CLAUDE_PROXY_KEY=<your-generated-key>
+  └─────────────────────────────────────────────────────────────┘
+```
+
+**Note:** On upgrade, the existing API key is preserved.
+
+### Install Options
+
 Install a specific version:
 
 ```bash
@@ -71,28 +96,7 @@ make install
 ./deploy/install.sh
 ```
 
-### 2. Configure the Proxy Service
-
-Edit the systemd service file:
-
-```bash
-sudo nano /etc/systemd/system/claude-proxy.service
-```
-
-Set the API key (generate one with `openssl rand -hex 32`):
-
-```ini
-Environment="PROXY_API_KEY=your-secure-api-key"
-```
-
-Reload and restart:
-
-```bash
-sudo systemctl daemon-reload
-sudo systemctl restart claude-proxy
-```
-
-### 3. Verify the Proxy is Running
+### Verify the Proxy is Running
 
 ```bash
 # Check status
@@ -103,6 +107,14 @@ sudo journalctl -u claude-proxy -f
 
 # Test health endpoint
 curl http://localhost:9090/health
+```
+
+### Retrieve API Key (if needed)
+
+If you need to retrieve the API key after installation:
+
+```bash
+sudo grep PROXY_API_KEY /etc/systemd/system/claude-proxy.service
 ```
 
 ## Configuration
