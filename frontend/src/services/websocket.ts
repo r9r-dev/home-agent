@@ -208,6 +208,18 @@ export class WebSocketService {
   }
 }
 
+// Build WebSocket URL from current location
+function getWebSocketUrl(): string {
+  // Use env variable if set (for development)
+  if (import.meta.env.VITE_WS_URL) {
+    return import.meta.env.VITE_WS_URL;
+  }
+
+  // Auto-detect from current location
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const host = window.location.host;
+  return `${protocol}//${host}/ws`;
+}
+
 // Singleton instance
-const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:8080/ws';
-export const websocketService = new WebSocketService({ url: WS_URL });
+export const websocketService = new WebSocketService({ url: getWebSocketUrl() });
