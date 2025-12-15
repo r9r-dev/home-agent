@@ -12,7 +12,7 @@ WORKDIR /app/frontend
 
 # Copy frontend package files
 COPY frontend/package*.json ./
-RUN npm ci
+RUN --mount=type=cache,target=/root/.npm npm ci
 
 # Copy frontend source
 COPY frontend/ ./
@@ -30,7 +30,7 @@ RUN apk add --no-cache git gcc musl-dev sqlite-dev
 
 # Copy go mod files
 COPY backend/go.* ./
-RUN go mod download
+RUN --mount=type=cache,target=/go/pkg/mod go mod download
 
 # Copy backend source
 COPY backend/ ./
@@ -38,8 +38,10 @@ COPY backend/ ./
 # Copy built frontend from previous stage
 COPY --from=frontend-builder /app/backend/public ./public
 
-# Build backend binary (CGO required for sqlite)
-RUN CGO_ENABLED=1 GOOS=linux go build -ldflags="-s -w" -o home-agent .
+# Build backend binary (CGO required for sqlite) with cache
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=1 GOOS=linux go build -ldflags="-s -w" -o home-agent .
 
 # Stage 3: Runtime image (minimal Alpine, no Node.js needed)
 FROM alpine:3.19
