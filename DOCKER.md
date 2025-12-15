@@ -394,46 +394,92 @@ Add load balancer (Nginx/HAProxy) in front.
 
 ## CI/CD Integration
 
-### GitHub Actions Example
+This project uses GitHub Actions for CI/CD with automatic Docker image publishing to GitHub Container Registry (ghcr.io).
+
+### Workflows
+
+**CI Workflow** (`.github/workflows/ci.yml`):
+- Triggers on: push to `main`, pull requests
+- Jobs:
+  - `test-frontend`: Runs TypeScript type checking
+  - `test-backend`: Runs Go tests
+  - `build-docker`: Builds Docker image (without push)
+
+**Release Workflow** (`.github/workflows/release.yml`):
+- Triggers on: push of tags matching `v*`
+- Builds and pushes Docker image to ghcr.io
+- Generated tags for `v1.2.3`:
+  - `ghcr.io/r9r-dev/home-agent:1.2.3`
+  - `ghcr.io/r9r-dev/home-agent:1.2`
+  - `ghcr.io/r9r-dev/home-agent:latest`
+
+### Creating a Release
+
+```bash
+# Create and push a tag
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+The release workflow will automatically build and push the Docker image.
+
+### Pulling the Image
+
+```bash
+# Pull latest
+docker pull ghcr.io/r9r-dev/home-agent:latest
+
+# Pull specific version
+docker pull ghcr.io/r9r-dev/home-agent:1.0.0
+```
+
+## Production Deployment
+
+### Example docker-compose for Production
+
+Create a `docker-compose.yml` on your server (do not commit this file as it contains server-specific configuration):
 
 ```yaml
-name: Build and Push
+services:
+  home-agent:
+    image: ghcr.io/r9r-dev/home-agent:latest
+    container_name: home-agent
+    volumes:
+      - /path/to/data:/data
+      - /path/to/workspace:/workspace
+    environment:
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      PORT: "8080"
+      HOST: "0.0.0.0"
+      DATABASE_PATH: /data/sessions.db
+      CLAUDE_BIN: /usr/local/bin/claude
+    restart: unless-stopped
+    networks:
+      - your-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
 
-on:
-  push:
-    branches: [main]
-
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
-      - name: Build image
-        run: docker build -t home-agent .
-      - name: Push to registry
-        run: docker push home-agent
+networks:
+  your-network:
+    external: true
 ```
 
-## Docker Hub
+### Environment Variables
 
-### Build for Multiple Platforms
+Create a `.env` file on your server:
 
 ```bash
-# Setup buildx
-docker buildx create --use
-
-# Build for multiple architectures
-docker buildx build --platform linux/amd64,linux/arm64 -t home-agent:latest .
+ANTHROPIC_API_KEY=sk-ant-your-api-key
 ```
 
-### Push to Registry
+### Start the Service
 
 ```bash
-# Tag image
-docker tag home-agent:latest yourusername/home-agent:latest
-
-# Push
-docker push yourusername/home-agent:latest
+docker compose up -d
 ```
 
 ## Common Commands
