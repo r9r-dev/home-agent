@@ -2,11 +2,16 @@
   import { onMount, onDestroy } from 'svelte';
   import { chatStore } from '../stores/chatStore';
   import { websocketService } from '../services/websocket';
+  import { fetchMessages, type Message as ApiMessage } from '../services/api';
   import MessageList from './MessageList.svelte';
   import InputBox from './InputBox.svelte';
+  import Sidebar from './Sidebar.svelte';
 
   // App version
-  const APP_VERSION = '0.3.1';
+  const APP_VERSION = '0.4.0';
+
+  // Sidebar reference for refreshing
+  let sidebar: { refresh: () => void };
 
   // Subscribe to store
   let state = $chatStore;
@@ -121,6 +126,46 @@
   }
 
   /**
+   * Handle selecting a session from the sidebar
+   */
+  async function handleSelectSession(sessionId: string) {
+    try {
+      // Fetch messages for the session
+      const apiMessages = await fetchMessages(sessionId);
+
+      // Convert API messages to store format
+      const messages = apiMessages.map((msg: ApiMessage) => ({
+        id: String(msg.id),
+        role: msg.role,
+        content: msg.content,
+        timestamp: new Date(msg.created_at),
+      }));
+
+      // Load messages into store
+      chatStore.loadMessages(sessionId, messages);
+      chatStore.setError(null);
+    } catch (error) {
+      console.error('[ChatWindow] Failed to load session:', error);
+      chatStore.setError('Failed to load conversation');
+    }
+  }
+
+  /**
+   * Handle creating a new conversation
+   */
+  function handleNewConversation() {
+    chatStore.clearMessages();
+    if (inputBox) {
+      inputBox.focus();
+    }
+  }
+
+  // Refresh sidebar when a message is sent (new session might be created)
+  $: if (!$chatStore.isTyping && $chatStore.messages.length > 0 && sidebar) {
+    sidebar.refresh();
+  }
+
+  /**
    * Get connection status display - reactive based on store values
    */
   $: connectionStatus = (() => {
@@ -166,43 +211,59 @@
   });
 </script>
 
-<div class="chat-window">
-  <header class="chat-header">
-    <div class="header-content">
-      <div class="header-logo">
-        <span class="logo-home">home</span><span class="logo-agent">agent</span>
-      </div>
-      <nav class="header-nav">
-        <a href="#" class="nav-link">Machines</a>
-        <a href="#" class="nav-link">Containers</a>
-        <div class="status-badge">
-          <span class="status-dot" style="background-color: {connectionStatus.color}"></span>
-          <span class="status-label">{connectionStatus.text}</span>
+<div class="app-container">
+  <Sidebar
+    bind:this={sidebar}
+    currentSessionId={state.currentSessionId}
+    onSelectSession={handleSelectSession}
+    onNewConversation={handleNewConversation}
+  />
+
+  <div class="chat-window">
+    <header class="chat-header">
+      <div class="header-content">
+        <div class="header-logo">
+          <span class="logo-home">home</span><span class="logo-agent">agent</span>
         </div>
-      </nav>
-    </div>
-  </header>
+        <nav class="header-nav">
+          <a href="#" class="nav-link">Machines</a>
+          <a href="#" class="nav-link">Containers</a>
+          <div class="status-badge">
+            <span class="status-dot" style="background-color: {connectionStatus.color}"></span>
+            <span class="status-label">{connectionStatus.text}</span>
+          </div>
+        </nav>
+      </div>
+    </header>
 
-  {#if state.error}
-    <div class="error-banner" role="alert">
-      <span>{state.error}</span>
-    </div>
-  {/if}
+    {#if state.error}
+      <div class="error-banner" role="alert">
+        <span>{state.error}</span>
+      </div>
+    {/if}
 
-  <MessageList messages={state.messages} isTyping={state.isTyping} />
+    <MessageList messages={state.messages} isTyping={state.isTyping} />
 
-  <InputBox bind:this={inputBox} onSend={handleSendMessage} disabled={!state.isConnected || state.isTyping} />
+    <InputBox bind:this={inputBox} onSend={handleSendMessage} disabled={!state.isConnected || state.isTyping} />
 
-  <footer class="app-footer">
-    <span>v{APP_VERSION}</span>
-  </footer>
+    <footer class="app-footer">
+      <span>v{APP_VERSION}</span>
+    </footer>
+  </div>
 </div>
 
 <style>
+  .app-container {
+    display: flex;
+    height: 100vh;
+    overflow: hidden;
+  }
+
   .chat-window {
     display: flex;
     flex-direction: column;
-    height: 100vh;
+    flex: 1;
+    min-width: 0;
     background: var(--color-bg-primary);
   }
 
@@ -297,6 +358,10 @@
 
   /* Responsive */
   @media (max-width: 768px) {
+    .app-container :global(.sidebar) {
+      display: none;
+    }
+
     .header-content {
       padding: 0.875rem 1rem;
     }

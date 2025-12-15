@@ -56,6 +56,11 @@ func (ch *ChatHandler) HandleMessage(ctx context.Context, request MessageRequest
 
 	if isNew {
 		log.Printf("Created new session: %s", sessionID)
+		// Auto-generate title from first message
+		title := services.GenerateTitle(request.Content)
+		if err := ch.sessionManager.UpdateSessionTitle(sessionID, title); err != nil {
+			log.Printf("Warning: failed to set session title: %v", err)
+		}
 	} else {
 		log.Printf("Using existing session: %s", sessionID)
 	}

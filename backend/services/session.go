@@ -140,3 +140,38 @@ func (sm *SessionManager) GetOrCreateSession(sessionID string) (string, bool, er
 
 	return sessionID, false, nil
 }
+
+// ListSessions returns all sessions ordered by last activity
+func (sm *SessionManager) ListSessions() ([]*models.Session, error) {
+	sessions, err := sm.db.ListSessions()
+	if err != nil {
+		return nil, fmt.Errorf("failed to list sessions: %w", err)
+	}
+	return sessions, nil
+}
+
+// UpdateSessionTitle updates the title of a session
+func (sm *SessionManager) UpdateSessionTitle(sessionID, title string) error {
+	if err := sm.db.UpdateSessionTitle(sessionID, title); err != nil {
+		return fmt.Errorf("failed to update session title: %w", err)
+	}
+	return nil
+}
+
+// DeleteSession deletes a session and all its messages
+func (sm *SessionManager) DeleteSession(sessionID string) error {
+	if err := sm.db.DeleteSession(sessionID); err != nil {
+		return fmt.Errorf("failed to delete session: %w", err)
+	}
+	return nil
+}
+
+// GenerateTitle generates a title from the first user message (max 50 chars)
+func GenerateTitle(content string) string {
+	// Remove newlines and extra spaces
+	title := content
+	if len(title) > 50 {
+		title = title[:47] + "..."
+	}
+	return title
+}

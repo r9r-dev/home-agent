@@ -13,6 +13,7 @@ import (
 type Session struct {
 	ID           int       `json:"id"`
 	SessionID    string    `json:"session_id"`    // Claude Code session UUID
+	Title        string    `json:"title"`         // Auto-generated title from first message
 	CreatedAt    time.Time `json:"created_at"`
 	LastActivity time.Time `json:"last_activity"`
 }
@@ -64,10 +65,17 @@ func (db *DB) createTables() error {
 	CREATE TABLE IF NOT EXISTS sessions (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		session_id TEXT UNIQUE NOT NULL,
+		title TEXT DEFAULT '',
 		created_at DATETIME NOT NULL,
 		last_activity DATETIME NOT NULL
 	);
 	CREATE INDEX IF NOT EXISTS idx_sessions_session_id ON sessions(session_id);
+	CREATE INDEX IF NOT EXISTS idx_sessions_last_activity ON sessions(last_activity DESC);
+	`
+
+	// Migration: add title column if it doesn't exist
+	alterTable := `
+	ALTER TABLE sessions ADD COLUMN title TEXT DEFAULT '';
 	`
 
 	messagesTable := `
@@ -92,6 +100,9 @@ func (db *DB) createTables() error {
 		return fmt.Errorf("failed to create messages table: %w", err)
 	}
 
+	// Run migration (ignore error if column already exists)
+	db.conn.Exec(alterTable)
+
 	return nil
 }
 
@@ -100,8 +111,8 @@ func (db *DB) CreateSession(sessionID string) (*Session, error) {
 	now := time.Now()
 
 	query := `
-	INSERT INTO sessions (session_id, created_at, last_activity)
-	VALUES (?, ?, ?)
+	INSERT INTO sessions (session_id, title, created_at, last_activity)
+	VALUES (?, '', ?, ?)
 	`
 
 	result, err := db.conn.Exec(query, sessionID, now, now)
@@ -119,6 +130,7 @@ func (db *DB) CreateSession(sessionID string) (*Session, error) {
 	return &Session{
 		ID:           int(id),
 		SessionID:    sessionID,
+		Title:        "",
 		CreatedAt:    now,
 		LastActivity: now,
 	}, nil
@@ -127,7 +139,7 @@ func (db *DB) CreateSession(sessionID string) (*Session, error) {
 // GetSession retrieves a session by its session ID
 func (db *DB) GetSession(sessionID string) (*Session, error) {
 	query := `
-	SELECT id, session_id, created_at, last_activity
+	SELECT id, session_id, title, created_at, last_activity
 	FROM sessions
 	WHERE session_id = ?
 	`
@@ -136,6 +148,7 @@ func (db *DB) GetSession(sessionID string) (*Session, error) {
 	err := db.conn.QueryRow(query, sessionID).Scan(
 		&session.ID,
 		&session.SessionID,
+		&session.Title,
 		&session.CreatedAt,
 		&session.LastActivity,
 	)
@@ -242,6 +255,95 @@ func (db *DB) GetMessages(sessionID string) ([]*Message, error) {
 	}
 
 	return messages, nil
+}
+
+// ListSessions retrieves all sessions ordered by last activity (most recent first)
+func (db *DB) ListSessions() ([]*Session, error) {
+	query := `
+	SELECT id, session_id, title, created_at, last_activity
+	FROM sessions
+	ORDER BY last_activity DESC
+	`
+
+	rows, err := db.conn.Query(query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list sessions: %w", err)
+	}
+	defer rows.Close()
+
+	var sessions []*Session
+	for rows.Next() {
+		var session Session
+		err := rows.Scan(
+			&session.ID,
+			&session.SessionID,
+			&session.Title,
+			&session.CreatedAt,
+			&session.LastActivity,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan session: %w", err)
+		}
+		sessions = append(sessions, &session)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating sessions: %w", err)
+	}
+
+	return sessions, nil
+}
+
+// UpdateSessionTitle updates the title of a session
+func (db *DB) UpdateSessionTitle(sessionID, title string) error {
+	query := `
+	UPDATE sessions
+	SET title = ?
+	WHERE session_id = ?
+	`
+
+	result, err := db.conn.Exec(query, title, sessionID)
+	if err != nil {
+		return fmt.Errorf("failed to update session title: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return fmt.Errorf("session not found: %s", sessionID)
+	}
+
+	return nil
+}
+
+// DeleteSession deletes a session and all its messages
+func (db *DB) DeleteSession(sessionID string) error {
+	// Delete messages first (foreign key)
+	_, err := db.conn.Exec("DELETE FROM messages WHERE session_id = ?", sessionID)
+	if err != nil {
+		return fmt.Errorf("failed to delete messages: %w", err)
+	}
+
+	// Delete session
+	result, err := db.conn.Exec("DELETE FROM sessions WHERE session_id = ?", sessionID)
+	if err != nil {
+		return fmt.Errorf("failed to delete session: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return fmt.Errorf("session not found: %s", sessionID)
+	}
+
+	log.Printf("Deleted session: %s", sessionID)
+	return nil
 }
 
 // Close closes the database connection
