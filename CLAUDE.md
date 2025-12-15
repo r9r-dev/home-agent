@@ -97,3 +97,4 @@ PUBLIC_DIR=./public             # Built frontend directory
 - Claude CLI installed via npm in container
 - Requires CGO for SQLite (`CGO_ENABLED=1`)
 - Published to `ghcr.io/r9r-dev/home-agent`
+- at the end of a task, commit, push and tag changes. respect semver rules for tag version
