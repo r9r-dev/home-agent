@@ -323,6 +323,48 @@ func (cs *ClaudeService) processStream(ctx context.Context, cancel context.Cance
 	}
 }
 
+// GenerateTitleSummary generates a short title summary for a conversation using Claude
+func (cs *ClaudeService) GenerateTitleSummary(userMessage, assistantResponse string) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Truncate messages if too long
+	if len(userMessage) > 500 {
+		userMessage = userMessage[:500]
+	}
+	if len(assistantResponse) > 500 {
+		assistantResponse = assistantResponse[:500]
+	}
+
+	prompt := "Generate a very short title (max 40 characters) that summarizes this conversation. " +
+		"Respond with ONLY the title, no quotes, no explanation.\n\n" +
+		"User: " + userMessage + "\n\n" +
+		"Assistant: " + assistantResponse
+
+	// Use haiku model for quick title generation
+	cmd := exec.CommandContext(ctx, cs.claudeBin,
+		"-p", prompt,
+		"--model", "haiku",
+		"--max-turns", "1",
+	)
+	cmd.Env = os.Environ()
+
+	output, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("failed to generate title: %w", err)
+	}
+
+	title := strings.TrimSpace(string(output))
+	// Remove quotes if present
+	title = strings.Trim(title, "\"'")
+	// Truncate if too long
+	if len(title) > 50 {
+		title = title[:47] + "..."
+	}
+
+	return title, nil
+}
+
 // TestClaudeBinary tests if the Claude binary is accessible
 func (cs *ClaudeService) TestClaudeBinary() error {
 	log.Printf("Testing Claude binary: %s", cs.claudeBin)

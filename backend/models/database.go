@@ -11,11 +11,12 @@ import (
 
 // Session represents a conversation session with Claude Code
 type Session struct {
-	ID           int       `json:"id"`
-	SessionID    string    `json:"session_id"`    // Claude Code session UUID
-	Title        string    `json:"title"`         // Auto-generated title from first message
-	CreatedAt    time.Time `json:"created_at"`
-	LastActivity time.Time `json:"last_activity"`
+	ID              int       `json:"id"`
+	SessionID       string    `json:"session_id"`        // Internal session UUID
+	ClaudeSessionID string    `json:"claude_session_id"` // Claude Code CLI session ID for --resume
+	Title           string    `json:"title"`             // Auto-generated title from first message
+	CreatedAt       time.Time `json:"created_at"`
+	LastActivity    time.Time `json:"last_activity"`
 }
 
 // Message represents a single message in a conversation
@@ -65,6 +66,7 @@ func (db *DB) createTables() error {
 	CREATE TABLE IF NOT EXISTS sessions (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		session_id TEXT UNIQUE NOT NULL,
+		claude_session_id TEXT DEFAULT '',
 		title TEXT DEFAULT '',
 		created_at DATETIME NOT NULL,
 		last_activity DATETIME NOT NULL
@@ -74,8 +76,13 @@ func (db *DB) createTables() error {
 	`
 
 	// Migration: add title column if it doesn't exist
-	alterTable := `
+	alterTableTitle := `
 	ALTER TABLE sessions ADD COLUMN title TEXT DEFAULT '';
+	`
+
+	// Migration: add claude_session_id column if it doesn't exist
+	alterTableClaudeSession := `
+	ALTER TABLE sessions ADD COLUMN claude_session_id TEXT DEFAULT '';
 	`
 
 	messagesTable := `
@@ -100,8 +107,9 @@ func (db *DB) createTables() error {
 		return fmt.Errorf("failed to create messages table: %w", err)
 	}
 
-	// Run migration (ignore error if column already exists)
-	db.conn.Exec(alterTable)
+	// Run migrations (ignore errors if columns already exist)
+	db.conn.Exec(alterTableTitle)
+	db.conn.Exec(alterTableClaudeSession)
 
 	return nil
 }
@@ -111,8 +119,8 @@ func (db *DB) CreateSession(sessionID string) (*Session, error) {
 	now := time.Now()
 
 	query := `
-	INSERT INTO sessions (session_id, title, created_at, last_activity)
-	VALUES (?, '', ?, ?)
+	INSERT INTO sessions (session_id, claude_session_id, title, created_at, last_activity)
+	VALUES (?, '', '', ?, ?)
 	`
 
 	result, err := db.conn.Exec(query, sessionID, now, now)
@@ -128,18 +136,19 @@ func (db *DB) CreateSession(sessionID string) (*Session, error) {
 	log.Printf("Created new session: %s (ID: %d)", sessionID, id)
 
 	return &Session{
-		ID:           int(id),
-		SessionID:    sessionID,
-		Title:        "",
-		CreatedAt:    now,
-		LastActivity: now,
+		ID:              int(id),
+		SessionID:       sessionID,
+		ClaudeSessionID: "",
+		Title:           "",
+		CreatedAt:       now,
+		LastActivity:    now,
 	}, nil
 }
 
 // GetSession retrieves a session by its session ID
 func (db *DB) GetSession(sessionID string) (*Session, error) {
 	query := `
-	SELECT id, session_id, title, created_at, last_activity
+	SELECT id, session_id, COALESCE(claude_session_id, ''), title, created_at, last_activity
 	FROM sessions
 	WHERE session_id = ?
 	`
@@ -148,6 +157,7 @@ func (db *DB) GetSession(sessionID string) (*Session, error) {
 	err := db.conn.QueryRow(query, sessionID).Scan(
 		&session.ID,
 		&session.SessionID,
+		&session.ClaudeSessionID,
 		&session.Title,
 		&session.CreatedAt,
 		&session.LastActivity,
@@ -260,7 +270,7 @@ func (db *DB) GetMessages(sessionID string) ([]*Message, error) {
 // ListSessions retrieves all sessions ordered by last activity (most recent first)
 func (db *DB) ListSessions() ([]*Session, error) {
 	query := `
-	SELECT id, session_id, title, created_at, last_activity
+	SELECT id, session_id, COALESCE(claude_session_id, ''), title, created_at, last_activity
 	FROM sessions
 	ORDER BY last_activity DESC
 	`
@@ -277,6 +287,7 @@ func (db *DB) ListSessions() ([]*Session, error) {
 		err := rows.Scan(
 			&session.ID,
 			&session.SessionID,
+			&session.ClaudeSessionID,
 			&session.Title,
 			&session.CreatedAt,
 			&session.LastActivity,
@@ -316,6 +327,32 @@ func (db *DB) UpdateSessionTitle(sessionID, title string) error {
 		return fmt.Errorf("session not found: %s", sessionID)
 	}
 
+	return nil
+}
+
+// UpdateClaudeSessionID updates the Claude CLI session ID for a session
+func (db *DB) UpdateClaudeSessionID(sessionID, claudeSessionID string) error {
+	query := `
+	UPDATE sessions
+	SET claude_session_id = ?
+	WHERE session_id = ?
+	`
+
+	result, err := db.conn.Exec(query, claudeSessionID, sessionID)
+	if err != nil {
+		return fmt.Errorf("failed to update claude session id: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return fmt.Errorf("session not found: %s", sessionID)
+	}
+
+	log.Printf("Updated Claude session ID for %s: %s", sessionID, claudeSessionID)
 	return nil
 }
 

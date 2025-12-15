@@ -56,11 +56,6 @@ func (ch *ChatHandler) HandleMessage(ctx context.Context, request MessageRequest
 
 	if isNew {
 		log.Printf("Created new session: %s", sessionID)
-		// Auto-generate title from first message
-		title := services.GenerateTitle(request.Content)
-		if err := ch.sessionManager.UpdateSessionTitle(sessionID, title); err != nil {
-			log.Printf("Warning: failed to set session title: %v", err)
-		}
 	} else {
 		log.Printf("Using existing session: %s", sessionID)
 	}
@@ -73,10 +68,17 @@ func (ch *ChatHandler) HandleMessage(ctx context.Context, request MessageRequest
 
 	// Execute Claude command
 	// For new sessions, don't pass a session ID to Claude - it will create one
+	// For existing sessions, use the stored Claude session ID
 	claudeSessionID := ""
 	if !isNew {
-		// Try to get the Claude session ID from session manager
-		claudeSessionID = sessionID
+		// Get the Claude session ID from database
+		storedClaudeID, err := ch.sessionManager.GetClaudeSessionIDFromDB(sessionID)
+		if err != nil {
+			log.Printf("Warning: failed to get Claude session ID: %v", err)
+		} else if storedClaudeID != "" {
+			claudeSessionID = storedClaudeID
+			log.Printf("Using stored Claude session ID: %s", claudeSessionID)
+		}
 	}
 	claudeResponseChan, err := ch.claudeService.ExecuteClaude(ctx, request.Content, claudeSessionID)
 	if err != nil {
@@ -87,13 +89,13 @@ func (ch *ChatHandler) HandleMessage(ctx context.Context, request MessageRequest
 	responseChan := make(chan MessageResponse, 100)
 
 	// Start goroutine to process Claude's responses
-	go ch.processClaudeResponse(sessionID, claudeResponseChan, responseChan)
+	go ch.processClaudeResponse(sessionID, isNew, request.Content, claudeResponseChan, responseChan)
 
 	return responseChan, nil
 }
 
 // processClaudeResponse processes the Claude response stream and sends formatted responses
-func (ch *ChatHandler) processClaudeResponse(sessionID string, claudeResponseChan <-chan services.ClaudeResponse, responseChan chan<- MessageResponse) {
+func (ch *ChatHandler) processClaudeResponse(sessionID string, isNewSession bool, userMessage string, claudeResponseChan <-chan services.ClaudeResponse, responseChan chan<- MessageResponse) {
 	defer close(responseChan)
 
 	var fullAssistantResponse strings.Builder
@@ -117,39 +119,61 @@ func (ch *ChatHandler) processClaudeResponse(sessionID string, claudeResponseCha
 				finalSessionID = claudeResp.SessionID
 				log.Printf("Received session ID from Claude: %s", finalSessionID)
 
-				// Send session ID to client
+				// Save Claude's session ID to database for future resumes
+				if err := ch.sessionManager.UpdateClaudeSessionID(sessionID, finalSessionID); err != nil {
+					log.Printf("Warning: failed to save Claude session ID: %v", err)
+				}
+
+				// Send our internal session ID to client (not Claude's)
 				responseChan <- MessageResponse{
 					Type:      "session_id",
-					SessionID: finalSessionID,
+					SessionID: sessionID,
 				}
 			}
 
 		case "done":
 			log.Println("Claude response complete")
 
-			// Use the session ID from the done event if available
-			if claudeResp.SessionID != "" {
+			// Use the session ID from the done event if available (for updating Claude session ID)
+			if claudeResp.SessionID != "" && finalSessionID == "" {
 				finalSessionID = claudeResp.SessionID
+				// Save Claude's session ID to database for future resumes
+				if err := ch.sessionManager.UpdateClaudeSessionID(sessionID, finalSessionID); err != nil {
+					log.Printf("Warning: failed to save Claude session ID: %v", err)
+				}
 			}
 
-			// If we still don't have a session ID, use the one we started with
-			if finalSessionID == "" {
-				finalSessionID = sessionID
-			}
-
-			// Save assistant's full response to database
+			// Save assistant's full response to database using our internal session ID
 			assistantMessage := fullAssistantResponse.String()
 			if assistantMessage != "" {
-				if err := ch.sessionManager.SaveMessage(finalSessionID, "assistant", assistantMessage); err != nil {
+				if err := ch.sessionManager.SaveMessage(sessionID, "assistant", assistantMessage); err != nil {
 					log.Printf("Warning: failed to save assistant message: %v", err)
 				}
 			}
 
-			// Send done signal to client
+			// Send done signal to client with our internal session ID
 			responseChan <- MessageResponse{
 				Type:      "done",
-				SessionID: finalSessionID,
+				SessionID: sessionID,
 				Content:   assistantMessage,
+			}
+
+			// Generate a summary title for new sessions (async, don't block)
+			if isNewSession && assistantMessage != "" {
+				go func() {
+					title, err := ch.claudeService.GenerateTitleSummary(userMessage, assistantMessage)
+					if err != nil {
+						log.Printf("Warning: failed to generate title summary: %v", err)
+						return
+					}
+					if title != "" {
+						if err := ch.sessionManager.UpdateSessionTitle(sessionID, title); err != nil {
+							log.Printf("Warning: failed to update session title: %v", err)
+						} else {
+							log.Printf("Updated session title to: %s", title)
+						}
+					}
+				}()
 			}
 
 		case "error":
