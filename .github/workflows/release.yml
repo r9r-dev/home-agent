@@ -14,20 +14,10 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-  # Build Claude Proxy binaries
+  # Build Claude Proxy binary
   build-proxy:
-    name: Build Claude Proxy (${{ matrix.os }}-${{ matrix.arch }})
+    name: Build Claude Proxy
     runs-on: self-hosted
-    strategy:
-      matrix:
-        include:
-          - os: linux
-            arch: amd64
-            goarch: amd64
-          - os: linux
-            arch: arm64
-            goarch: arm64
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -45,8 +35,8 @@ jobs:
       - name: Build claude-proxy binary
         working-directory: ./claude-proxy
         env:
-          GOOS: ${{ matrix.os }}
-          GOARCH: ${{ matrix.goarch }}
+          GOOS: linux
+          GOARCH: amd64
           CGO_ENABLED: 0
         run: |
           go build -ldflags="-s -w -X main.Version=${{ steps.version.outputs.VERSION }}" -o claude-proxy .
@@ -54,13 +44,13 @@ jobs:
       - name: Create archive
         working-directory: ./claude-proxy
         run: |
-          tar -czvf claude-proxy-${{ matrix.os }}-${{ matrix.arch }}.tar.gz claude-proxy
+          tar -czvf claude-proxy-linux-amd64.tar.gz claude-proxy
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: claude-proxy-${{ matrix.os }}-${{ matrix.arch }}
-          path: ./claude-proxy/claude-proxy-${{ matrix.os }}-${{ matrix.arch }}.tar.gz
+          name: claude-proxy-linux-amd64
+          path: ./claude-proxy/claude-proxy-linux-amd64.tar.gz
 
   # Build and push Docker image
   build-docker:
@@ -69,9 +59,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -98,7 +85,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -162,11 +149,10 @@ jobs:
             curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/main/claude-proxy/install.sh | sudo bash -s -- --version ${{ steps.version.outputs.VERSION }}
             ```
 
-            ### Claude Proxy Binaries
+            ### Claude Proxy Binary
 
             Download manually:
             - `claude-proxy-linux-amd64.tar.gz` - Linux x86_64
-            - `claude-proxy-linux-arm64.tar.gz` - Linux ARM64 (Raspberry Pi 4, etc.)
           files: |
             artifacts/*/claude-proxy-*.tar.gz
             artifacts/checksums.txt
