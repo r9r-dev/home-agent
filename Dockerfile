@@ -5,6 +5,9 @@
 # Stage 1: Build frontend
 FROM node:20-alpine AS frontend-builder
 
+# Version from git tag (passed via --build-arg)
+ARG APP_VERSION=dev
+
 WORKDIR /app/frontend
 
 # Copy frontend package files
@@ -14,8 +17,8 @@ RUN npm ci
 # Copy frontend source
 COPY frontend/ ./
 
-# Build frontend (outputs to ../backend/public)
-RUN npm run build
+# Build frontend with version (outputs to ../backend/public)
+RUN APP_VERSION=${APP_VERSION} npm run build
 
 # Stage 2: Build backend
 FROM golang:1.21-alpine AS backend-builder
