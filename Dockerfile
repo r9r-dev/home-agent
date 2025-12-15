@@ -75,7 +75,9 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
 ENV PORT=8080 \
     HOST=0.0.0.0 \
     DATABASE_PATH=/data/sessions.db \
-    CLAUDE_BIN=/usr/local/bin/claude
+    CLAUDE_BIN=/usr/local/bin/claude \
+    DISABLE_AUTOUPDATER=1 \
+    DISABLE_TELEMETRY=1
 
 # Run the application
 CMD ["./home-agent"]
