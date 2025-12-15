@@ -235,6 +235,7 @@
     font-size: 0.875rem;
     line-height: 1.7;
     font-family: var(--font-family-mono);
+    white-space: pre-wrap;
   }
 
   .message-time {

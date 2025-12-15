@@ -6,6 +6,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Home Agent is a web chat interface that wraps Claude Code CLI. It consists of a Go backend (Fiber framework) and Svelte/TypeScript frontend communicating via WebSocket for real-time streaming responses.
 
+The system supports two execution modes:
+- **Local mode**: Backend executes Claude CLI directly on the same machine
+- **Proxy mode**: Backend connects to a remote Claude Proxy service via WebSocket, allowing the container to use Claude CLI running on the host
+
 ## Build & Development Commands
 
 ```bash
@@ -28,8 +32,14 @@ cd frontend && npm run check
 # Run backend tests
 cd backend && go test ./...
 
-# Docker build
-docker build -t home-agent .
+# Build container image (use 'container' not 'docker' on this system)
+container build -t home-agent .
+
+# Run Claude Proxy locally for development
+cd claude-proxy && PROXY_PORT=9090 go run .
+
+# Test backend against local proxy
+cd backend && CLAUDE_PROXY_URL=http://localhost:9090 go run .
 
 # Create release (triggers GitHub Actions)
 git tag v0.x.x && git push origin v0.x.x
@@ -37,29 +47,45 @@ git tag v0.x.x && git push origin v0.x.x
 
 ## Architecture
 
-### Backend (Go + Fiber)
-- `main.go` - HTTP server, routes, middleware, static file serving
+### Three Main Components
+
+1. **Backend** (`backend/`) - Go + Fiber HTTP/WebSocket server
+2. **Frontend** (`frontend/`) - Svelte SPA with TypeScript
+3. **Claude Proxy** (`claude-proxy/`) - Standalone service that executes Claude CLI on behalf of containerized clients
+
+### Backend Key Files
+- `main.go` - HTTP server, routes, middleware, initializes ClaudeExecutor based on config
 - `handlers/websocket.go` - WebSocket upgrade and message routing
 - `handlers/chat.go` - Message processing, coordinates Claude service and session management
-- `services/claude.go` - Executes Claude Code CLI with `--resume` for session continuity, streams JSON responses
+- `services/claude_executor.go` - Interface definition for Claude execution
+- `services/claude.go` - Local executor (direct CLI execution)
+- `services/proxy_claude_executor.go` - Proxy executor (remote execution via WebSocket)
 - `services/session.go` - Session CRUD, maps internal session IDs to Claude CLI session IDs
-- `models/database.go` - SQLite schema with migrations, sessions and messages tables
+- `models/database.go` - SQLite schema with migrations
 
-### Frontend (Svelte + TypeScript)
-- `components/ChatWindow.svelte` - Main layout, integrates Sidebar and chat area
-- `components/Sidebar.svelte` - Conversation history list
-- `components/MessageList.svelte` - Renders messages with markdown
-- `components/InputBox.svelte` - User input with submit handling
-- `stores/chatStore.ts` - Reactive state for messages, connection status, typing indicator
-- `services/websocket.ts` - WebSocket client with auto-reconnect
-- `services/api.ts` - REST API calls for sessions
+### ClaudeExecutor Interface
+
+The `ClaudeExecutor` interface abstracts Claude CLI execution:
+
+```go
+type ClaudeExecutor interface {
+    ExecuteClaude(ctx, prompt, sessionID) (<-chan ClaudeResponse, error)
+    GenerateTitleSummary(userMessage, assistantResponse) (string, error)
+    TestConnection() error
+}
+```
+
+Two implementations:
+- `LocalClaudeExecutor` - Spawns Claude CLI process directly
+- `ProxyClaudeExecutor` - Connects to Claude Proxy via WebSocket
 
 ### Key Data Flow
 1. User sends message via WebSocket (`type: "message"`)
-2. Backend creates/resumes session, calls Claude CLI with `--resume <claude_session_id>`
-3. Claude CLI streams JSON events, backend forwards as `type: "chunk"` messages
-4. Backend saves messages to SQLite, generates summary title using Claude (haiku)
-5. Frontend accumulates chunks in store, updates UI reactively
+2. Backend creates/resumes session, calls ClaudeExecutor
+3. Executor streams responses back as `ClaudeResponse` events
+4. Backend forwards as `type: "chunk"` messages to frontend
+5. Backend saves messages to SQLite, generates summary title using Claude (haiku)
+6. Frontend accumulates chunks in store, updates UI reactively
 
 ### Session Management
 - Internal `session_id` (UUID) used for database foreign keys and frontend routing
@@ -83,18 +109,40 @@ git tag v0.x.x && git push origin v0.x.x
 
 ## Environment Variables
 
+### Backend (Home Agent)
 ```bash
-ANTHROPIC_API_KEY=sk-ant-...   # Required for Claude CLI
 PORT=8080                       # Backend port
 DATABASE_PATH=./data/homeagent.db
-CLAUDE_BIN=claude               # Path to Claude CLI binary
 PUBLIC_DIR=./public             # Built frontend directory
+
+# Local mode (direct CLI execution)
+CLAUDE_BIN=claude               # Path to Claude CLI binary
+ANTHROPIC_API_KEY=sk-ant-...   # Required for Claude CLI
+
+# Proxy mode (remote execution)
+CLAUDE_PROXY_URL=http://192.168.1.100:9090  # Proxy service URL
+CLAUDE_PROXY_KEY=your-api-key               # Proxy authentication
 ```
 
-## Docker
+### Claude Proxy Service
+```bash
+PROXY_PORT=9090                 # Port to listen on
+PROXY_HOST=0.0.0.0              # Host to bind to
+PROXY_API_KEY=...               # API key for authentication
+CLAUDE_BIN=claude               # Path to Claude CLI
+```
 
-- Multi-stage build: Node.js for frontend, Go for backend, Alpine runtime
-- Claude CLI installed via npm in container
-- Requires CGO for SQLite (`CGO_ENABLED=1`)
-- Published to `ghcr.io/r9r-dev/home-agent`
-- at the end of a task, commit, push and tag changes. respect semver rules for tag version
+## Docker Deployment
+
+The Docker image does NOT include Claude CLI. It requires connection to a Claude Proxy service running on the host:
+
+1. Install Claude Proxy on host: `curl -fsSL .../install.sh | sudo bash`
+2. Run container with proxy URL:
+   ```bash
+   container run -d -p 8080:8080 \
+     -e CLAUDE_PROXY_URL=http://HOST_IP:9090 \
+     -e CLAUDE_PROXY_KEY=your-key \
+     home-agent
+   ```
+
+See `docs/claude-proxy.md` for detailed proxy setup.
