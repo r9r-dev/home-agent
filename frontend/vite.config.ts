@@ -5,7 +5,16 @@ export default defineConfig({
   plugins: [svelte()],
   build: {
     outDir: '../backend/public',
-    emptyOutDir: true
+    emptyOutDir: true,
+    chunkSizeWarningLimit: 1000,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'highlight': ['highlight.js'],
+          'markdown': ['marked']
+        }
+      }
+    }
   },
   server: {
     port: 5173,
