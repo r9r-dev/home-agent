@@ -1,5 +1,6 @@
 # Multi-stage Dockerfile for Home Agent
 # Builds both frontend and backend in a single container
+# Claude CLI is NOT included - use CLAUDE_PROXY_URL to connect to host proxy
 
 # Stage 1: Build frontend
 FROM node:20-alpine AS frontend-builder
@@ -37,28 +38,28 @@ COPY --from=frontend-builder /app/backend/public ./public
 # Build backend binary (CGO required for sqlite)
 RUN CGO_ENABLED=1 GOOS=linux go build -ldflags="-s -w" -o home-agent .
 
-# Stage 3: Runtime image (Node.js for Claude CLI)
-FROM node:20-alpine
+# Stage 3: Runtime image (minimal Alpine, no Node.js needed)
+FROM alpine:3.19
 
-# Install runtime dependencies (sqlite for database)
+# Install runtime dependencies only
 RUN apk add --no-cache ca-certificates tzdata curl sqlite-libs
 
-# Install Claude Code CLI via npm
-RUN npm install -g @anthropic-ai/claude-code
+# Create non-root user
+RUN adduser -D -H -u 1000 appuser
 
-# Create directories (use existing 'node' user from node:alpine image)
-RUN mkdir -p /app /data /workspace && \
-    chown -R node:node /app /data /workspace
+# Create directories
+RUN mkdir -p /app /data && \
+    chown -R appuser:appuser /app /data
 
 # Set working directory
 WORKDIR /app
 
 # Copy binary from builder
-COPY --from=backend-builder --chown=node:node /app/home-agent ./
-COPY --from=backend-builder --chown=node:node /app/public ./public
+COPY --from=backend-builder --chown=appuser:appuser /app/home-agent ./
+COPY --from=backend-builder --chown=appuser:appuser /app/public ./public
 
 # Switch to non-root user
-USER node
+USER appuser
 
 # Expose port
 EXPOSE 8080
@@ -68,12 +69,12 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
   CMD curl -f http://localhost:8080/health || exit 1
 
 # Set environment variables
+# CLAUDE_PROXY_URL must be set to point to the host's Claude proxy service
 ENV PORT=8080 \
     HOST=0.0.0.0 \
     DATABASE_PATH=/data/sessions.db \
-    CLAUDE_BIN=/usr/local/bin/claude \
-    DISABLE_AUTOUPDATER=1 \
-    DISABLE_TELEMETRY=1
+    CLAUDE_PROXY_URL= \
+    CLAUDE_PROXY_KEY=
 
 # Run the application
 CMD ["./home-agent"]

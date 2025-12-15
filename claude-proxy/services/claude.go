@@ -43,30 +43,29 @@ type ClaudeResponse struct {
 	Error     error
 }
 
-// LocalClaudeExecutor handles direct interaction with Claude Code CLI.
-// It implements the ClaudeExecutor interface for local execution.
-type LocalClaudeExecutor struct {
-	claudeBin string // Path to the claude binary
+// ClaudeService handles direct interaction with Claude Code CLI
+type ClaudeService struct {
+	claudeBin string
 	timeout   time.Duration
 }
 
-// NewLocalClaudeExecutor creates a new LocalClaudeExecutor instance
-func NewLocalClaudeExecutor(claudeBin string) *LocalClaudeExecutor {
+// NewClaudeService creates a new ClaudeService instance
+func NewClaudeService(claudeBin string) *ClaudeService {
 	if claudeBin == "" {
-		claudeBin = "claude" // Default to PATH lookup
+		claudeBin = "claude"
 	}
 
-	log.Printf("Initializing LocalClaudeExecutor with binary: %s", claudeBin)
+	log.Printf("Initializing ClaudeService with binary: %s", claudeBin)
 
-	return &LocalClaudeExecutor{
+	return &ClaudeService{
 		claudeBin: claudeBin,
-		timeout:   10 * time.Minute, // Default 10 minute timeout
+		timeout:   10 * time.Minute,
 	}
 }
 
 // SetTimeout sets the timeout for Claude command execution
-func (lce *LocalClaudeExecutor) SetTimeout(timeout time.Duration) {
-	lce.timeout = timeout
+func (cs *ClaudeService) SetTimeout(timeout time.Duration) {
+	cs.timeout = timeout
 }
 
 // System prompt for Home Agent
@@ -85,14 +84,11 @@ Be careful with destructive commands and always confirm before making significan
 Respond in the same language as the user.`
 
 // ExecuteClaude executes the Claude Code CLI and streams the response
-// If sessionID is provided, it resumes the existing session
-func (lce *LocalClaudeExecutor) ExecuteClaude(ctx context.Context, prompt string, sessionID string) (<-chan ClaudeResponse, error) {
+func (cs *ClaudeService) ExecuteClaude(ctx context.Context, prompt string, sessionID string) (<-chan ClaudeResponse, error) {
 	log.Printf("Executing Claude with prompt (length: %d), sessionID: %s", len(prompt), sessionID)
 
-	// Create a context with timeout
-	ctx, cancel := context.WithTimeout(ctx, lce.timeout)
+	ctx, cancel := context.WithTimeout(ctx, cs.timeout)
 
-	// Build command arguments
 	args := []string{
 		"-p", prompt,
 		"--output-format", "stream-json",
@@ -102,33 +98,26 @@ func (lce *LocalClaudeExecutor) ExecuteClaude(ctx context.Context, prompt string
 		"--dangerously-skip-permissions",
 	}
 
-	// Add resume flag if session ID is provided
 	if sessionID != "" {
 		args = append(args, "--resume", sessionID)
 		log.Printf("Resuming Claude session: %s", sessionID)
 	}
 
-	// Create the command
-	cmd := exec.CommandContext(ctx, lce.claudeBin, args...)
-
-	// Set environment variables
+	cmd := exec.CommandContext(ctx, cs.claudeBin, args...)
 	cmd.Env = os.Environ()
 
-	// Get stdout pipe
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		cancel()
 		return nil, fmt.Errorf("failed to create stdout pipe: %w", err)
 	}
 
-	// Get stderr pipe for error logging
 	stderr, err := cmd.StderrPipe()
 	if err != nil {
 		cancel()
 		return nil, fmt.Errorf("failed to create stderr pipe: %w", err)
 	}
 
-	// Start the command
 	if err := cmd.Start(); err != nil {
 		cancel()
 		return nil, fmt.Errorf("failed to start claude command: %w", err)
@@ -136,20 +125,16 @@ func (lce *LocalClaudeExecutor) ExecuteClaude(ctx context.Context, prompt string
 
 	log.Printf("Claude command started (PID: %d)", cmd.Process.Pid)
 
-	// Create response channel
 	responseChan := make(chan ClaudeResponse, 100)
 
-	// Start goroutine to read stderr
-	go lce.readStderr(stderr)
-
-	// Start goroutine to process stdout
-	go lce.processStream(ctx, cancel, cmd, stdout, responseChan)
+	go cs.readStderr(stderr)
+	go cs.processStream(ctx, cancel, cmd, stdout, responseChan)
 
 	return responseChan, nil
 }
 
 // readStderr reads and logs stderr output from Claude
-func (lce *LocalClaudeExecutor) readStderr(stderr io.ReadCloser) {
+func (cs *ClaudeService) readStderr(stderr io.ReadCloser) {
 	scanner := bufio.NewScanner(stderr)
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -159,14 +144,13 @@ func (lce *LocalClaudeExecutor) readStderr(stderr io.ReadCloser) {
 	}
 }
 
-// processStream processes the JSON stream from Claude and sends responses to the channel
-func (lce *LocalClaudeExecutor) processStream(ctx context.Context, cancel context.CancelFunc, cmd *exec.Cmd, stdout io.ReadCloser, responseChan chan<- ClaudeResponse) {
+// processStream processes the JSON stream from Claude
+func (cs *ClaudeService) processStream(ctx context.Context, cancel context.CancelFunc, cmd *exec.Cmd, stdout io.ReadCloser, responseChan chan<- ClaudeResponse) {
 	defer close(responseChan)
 	defer cancel()
 	defer stdout.Close()
 
 	scanner := bufio.NewScanner(stdout)
-	// Increase buffer size for large JSON lines
 	buf := make([]byte, 0, 64*1024)
 	scanner.Buffer(buf, 1024*1024)
 
@@ -190,26 +174,21 @@ func (lce *LocalClaudeExecutor) processStream(ctx context.Context, cancel contex
 			continue
 		}
 
-		// Parse JSON event
 		var event ClaudeStreamEvent
 		if err := json.Unmarshal([]byte(line), &event); err != nil {
 			log.Printf("Failed to parse JSON line: %v, line: %s", err, line)
 			continue
 		}
 
-		// Handle different event types
 		switch event.Type {
 		case "system":
-			// System event from verbose mode, contains session_id
 			if event.SessionID != "" {
 				detectedSessionID = event.SessionID
 				log.Printf("Detected session ID from system event: %s", event.SessionID)
 			}
 
 		case "assistant":
-			// Assistant message from verbose mode
 			log.Println("Stream: assistant message")
-			// Extract text content from message.content array
 			if event.Message != nil {
 				if content, ok := event.Message["content"].([]interface{}); ok {
 					for _, item := range content {
@@ -217,7 +196,6 @@ func (lce *LocalClaudeExecutor) processStream(ctx context.Context, cancel contex
 							if contentType, ok := contentMap["type"].(string); ok && contentType == "text" {
 								if text, ok := contentMap["text"].(string); ok && text != "" {
 									fullResponse.WriteString(text)
-									// Send the text as a single chunk
 									responseChan <- ClaudeResponse{
 										Type:    "chunk",
 										Content: text,
@@ -230,7 +208,6 @@ func (lce *LocalClaudeExecutor) processStream(ctx context.Context, cancel contex
 			}
 
 		case "result":
-			// Result event from verbose mode - final event
 			log.Println("Stream: result")
 			if event.SessionID != "" {
 				detectedSessionID = event.SessionID
@@ -238,7 +215,6 @@ func (lce *LocalClaudeExecutor) processStream(ctx context.Context, cancel contex
 
 		case "message_start":
 			log.Println("Stream: message_start")
-			// Check if session_id is in the message
 			if event.Message != nil {
 				if sid, ok := event.Message["session_id"].(string); ok && sid != "" {
 					detectedSessionID = sid
@@ -276,7 +252,6 @@ func (lce *LocalClaudeExecutor) processStream(ctx context.Context, cancel contex
 			return
 
 		default:
-			// Check if this line contains a session_id at the root level
 			if event.SessionID != "" {
 				detectedSessionID = event.SessionID
 				log.Printf("Detected session ID from event: %s", event.SessionID)
@@ -293,10 +268,8 @@ func (lce *LocalClaudeExecutor) processStream(ctx context.Context, cancel contex
 		return
 	}
 
-	// Wait for command to finish
 	if err := cmd.Wait(); err != nil {
 		log.Printf("Command finished with error: %v", err)
-		// Don't send error if we already got content - Claude might exit with non-zero on some conditions
 		if fullResponse.Len() == 0 {
 			responseChan <- ClaudeResponse{
 				Type:  "error",
@@ -308,7 +281,6 @@ func (lce *LocalClaudeExecutor) processStream(ctx context.Context, cancel contex
 
 	log.Printf("Stream processing complete. Total response length: %d", fullResponse.Len())
 
-	// Send session ID if detected
 	if detectedSessionID != "" {
 		responseChan <- ClaudeResponse{
 			Type:      "session_id",
@@ -316,7 +288,6 @@ func (lce *LocalClaudeExecutor) processStream(ctx context.Context, cancel contex
 		}
 	}
 
-	// Send done signal with full response
 	responseChan <- ClaudeResponse{
 		Type:      "done",
 		Content:   fullResponse.String(),
@@ -324,12 +295,11 @@ func (lce *LocalClaudeExecutor) processStream(ctx context.Context, cancel contex
 	}
 }
 
-// GenerateTitleSummary generates a short title summary for a conversation using Claude
-func (lce *LocalClaudeExecutor) GenerateTitleSummary(userMessage, assistantResponse string) (string, error) {
+// GenerateTitleSummary generates a short title summary for a conversation
+func (cs *ClaudeService) GenerateTitleSummary(userMessage, assistantResponse string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	// Truncate messages if too long
 	if len(userMessage) > 500 {
 		userMessage = userMessage[:500]
 	}
@@ -342,8 +312,7 @@ func (lce *LocalClaudeExecutor) GenerateTitleSummary(userMessage, assistantRespo
 		"User: " + userMessage + "\n\n" +
 		"Assistant: " + assistantResponse
 
-	// Use haiku model for quick title generation
-	cmd := exec.CommandContext(ctx, lce.claudeBin,
+	cmd := exec.CommandContext(ctx, cs.claudeBin,
 		"-p", prompt,
 		"--model", "haiku",
 		"--max-turns", "1",
@@ -356,9 +325,7 @@ func (lce *LocalClaudeExecutor) GenerateTitleSummary(userMessage, assistantRespo
 	}
 
 	title := strings.TrimSpace(string(output))
-	// Remove quotes if present
 	title = strings.Trim(title, "\"'")
-	// Truncate if too long
 	if len(title) > 50 {
 		title = title[:47] + "..."
 	}
@@ -366,15 +333,14 @@ func (lce *LocalClaudeExecutor) GenerateTitleSummary(userMessage, assistantRespo
 	return title, nil
 }
 
-// TestConnection tests if the Claude binary is accessible.
-// Implements ClaudeExecutor interface.
-func (lce *LocalClaudeExecutor) TestConnection() error {
-	log.Printf("Testing Claude binary: %s", lce.claudeBin)
+// TestClaudeBinary tests if the Claude binary is accessible
+func (cs *ClaudeService) TestClaudeBinary() error {
+	log.Printf("Testing Claude binary: %s", cs.claudeBin)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, lce.claudeBin, "--version")
+	cmd := exec.CommandContext(ctx, cs.claudeBin, "--version")
 	output, err := cmd.CombinedOutput()
 
 	if err != nil {

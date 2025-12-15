@@ -11,16 +11,16 @@ import (
 
 // ChatHandler handles chat message processing and coordination
 type ChatHandler struct {
-	sessionManager *services.SessionManager
-	claudeService  *services.ClaudeService
+	sessionManager  *services.SessionManager
+	claudeExecutor  services.ClaudeExecutor
 }
 
 // NewChatHandler creates a new ChatHandler instance
-func NewChatHandler(sessionManager *services.SessionManager, claudeService *services.ClaudeService) *ChatHandler {
+func NewChatHandler(sessionManager *services.SessionManager, claudeExecutor services.ClaudeExecutor) *ChatHandler {
 	log.Println("Initializing ChatHandler")
 	return &ChatHandler{
-		sessionManager: sessionManager,
-		claudeService:  claudeService,
+		sessionManager:  sessionManager,
+		claudeExecutor:  claudeExecutor,
 	}
 }
 
@@ -80,7 +80,7 @@ func (ch *ChatHandler) HandleMessage(ctx context.Context, request MessageRequest
 			log.Printf("Using stored Claude session ID: %s", claudeSessionID)
 		}
 	}
-	claudeResponseChan, err := ch.claudeService.ExecuteClaude(ctx, request.Content, claudeSessionID)
+	claudeResponseChan, err := ch.claudeExecutor.ExecuteClaude(ctx, request.Content, claudeSessionID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute claude: %w", err)
 	}
@@ -161,7 +161,7 @@ func (ch *ChatHandler) processClaudeResponse(sessionID string, isNewSession bool
 			// Generate a summary title for new sessions (async, don't block)
 			if isNewSession && assistantMessage != "" {
 				go func() {
-					title, err := ch.claudeService.GenerateTitleSummary(userMessage, assistantMessage)
+					title, err := ch.claudeExecutor.GenerateTitleSummary(userMessage, assistantMessage)
 					if err != nil {
 						log.Printf("Warning: failed to generate title summary: %v", err)
 						return

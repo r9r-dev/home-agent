@@ -5,33 +5,84 @@ on:
     tags:
       - 'v*'
 
+permissions:
+  contents: write
+  packages: write
+
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-  release:
-    name: Build and Push Docker Image
+  # Build Claude Proxy binaries
+  build-proxy:
+    name: Build Claude Proxy (${{ matrix.os }}-${{ matrix.arch }})
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
+    strategy:
+      matrix:
+        include:
+          - os: linux
+            arch: amd64
+            goarch: amd64
+          - os: linux
+            arch: arm64
+            goarch: arm64
 
     steps:
-      - name: Checkout
+      - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+
+      - name: Get version
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Build claude-proxy binary
+        working-directory: ./claude-proxy
+        env:
+          GOOS: ${{ matrix.os }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 0
+        run: |
+          go build -ldflags="-s -w -X main.Version=${{ steps.version.outputs.VERSION }}" -o claude-proxy .
+
+      - name: Create archive
+        working-directory: ./claude-proxy
+        run: |
+          tar -czvf claude-proxy-${{ matrix.os }}-${{ matrix.arch }}.tar.gz claude-proxy
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: claude-proxy-${{ matrix.os }}-${{ matrix.arch }}
+          path: ./claude-proxy/claude-proxy-${{ matrix.os }}-${{ matrix.arch }}.tar.gz
+
+  # Build and push Docker image
+  build-docker:
+    name: Build Docker Image
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Log in to GitHub Container Registry
+      - name: Log in to Container Registry
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract metadata for Docker
+      - name: Extract metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
@@ -39,14 +90,79 @@ jobs:
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=latest,enable={{is_default_branch}}
+            type=semver,pattern={{major}}
+            type=raw,value=latest
 
       - name: Build and push Docker image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v5
         with:
           context: .
+          platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  # Create GitHub Release with all artifacts
+  release:
+    name: Create Release
+    needs: [build-proxy, build-docker]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./artifacts
+
+      - name: Get version
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Generate checksums
+        run: |
+          cd artifacts
+          sha256sum */claude-proxy-*.tar.gz > checksums.txt
+          cat checksums.txt
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Home Agent ${{ steps.version.outputs.VERSION }}
+          generate_release_notes: true
+          body: |
+            ## Home Agent ${{ steps.version.outputs.VERSION }}
+
+            ### Docker Image
+
+            ```bash
+            docker pull ghcr.io/${{ github.repository }}:${{ steps.version.outputs.VERSION }}
+            ```
+
+            ### Claude Proxy Installation
+
+            Install or update Claude Proxy on your host:
+
+            ```bash
+            curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/main/claude-proxy/install.sh | sudo bash
+            ```
+
+            Or install this specific version:
+
+            ```bash
+            curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/main/claude-proxy/install.sh | sudo bash -s -- --version ${{ steps.version.outputs.VERSION }}
+            ```
+
+            ### Claude Proxy Binaries
+
+            Download manually:
+            - `claude-proxy-linux-amd64.tar.gz` - Linux x86_64
+            - `claude-proxy-linux-arm64.tar.gz` - Linux ARM64 (Raspberry Pi 4, etc.)
+          files: |
+            artifacts/*/claude-proxy-*.tar.gz
+            artifacts/checksums.txt
+          draft: false
+          prerelease: false

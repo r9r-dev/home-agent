@@ -7,6 +7,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"syscall"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
@@ -19,26 +20,38 @@ import (
 
 // Config holds the application configuration
 type Config struct {
-	Port         string
-	DatabasePath string
-	ClaudeBin    string
-	PublicDir    string
+	Port          string
+	DatabasePath  string
+	ClaudeBin     string
+	PublicDir     string
+	ClaudeProxyURL string // If set, use proxy instead of local CLI
+	ClaudeProxyKey string // API key for proxy authentication
 }
 
 // loadConfig loads configuration from environment variables with defaults
 func loadConfig() Config {
 	config := Config{
-		Port:         getEnv("PORT", "8080"),
-		DatabasePath: getEnv("DATABASE_PATH", "./data/homeagent.db"),
-		ClaudeBin:    getEnv("CLAUDE_BIN", "claude"),
-		PublicDir:    getEnv("PUBLIC_DIR", "./public"),
+		Port:          getEnv("PORT", "8080"),
+		DatabasePath:  getEnv("DATABASE_PATH", "./data/homeagent.db"),
+		ClaudeBin:     getEnv("CLAUDE_BIN", "claude"),
+		PublicDir:     getEnv("PUBLIC_DIR", "./public"),
+		ClaudeProxyURL: getEnv("CLAUDE_PROXY_URL", ""),
+		ClaudeProxyKey: getEnv("CLAUDE_PROXY_KEY", ""),
 	}
 
 	log.Println("Configuration loaded:")
 	log.Printf("  Port: %s", config.Port)
 	log.Printf("  Database: %s", config.DatabasePath)
-	log.Printf("  Claude binary: %s", config.ClaudeBin)
 	log.Printf("  Public directory: %s", config.PublicDir)
+
+	if config.ClaudeProxyURL != "" {
+		log.Printf("  Claude mode: proxy (%s)", config.ClaudeProxyURL)
+		if config.ClaudeProxyKey != "" {
+			log.Println("  Claude proxy key: configured")
+		}
+	} else {
+		log.Printf("  Claude mode: local (%s)", config.ClaudeBin)
+	}
 
 	return config
 }
@@ -88,16 +101,36 @@ func main() {
 
 	// Initialize services
 	sessionManager := services.NewSessionManager(db)
-	claudeService := services.NewClaudeService(config.ClaudeBin)
 
-	// Test Claude binary
-	if err := claudeService.TestClaudeBinary(); err != nil {
-		log.Printf("Warning: Claude binary test failed: %v", err)
-		log.Println("Make sure the 'claude' CLI is installed and accessible")
+	// Initialize Claude executor based on configuration
+	var claudeExecutor services.ClaudeExecutor
+
+	if config.ClaudeProxyURL != "" {
+		// Use proxy executor for remote Claude CLI execution
+		log.Printf("Initializing proxy Claude executor: %s", config.ClaudeProxyURL)
+		claudeExecutor = services.NewProxyClaudeExecutor(services.ProxyConfig{
+			ProxyURL: config.ClaudeProxyURL,
+			APIKey:   config.ClaudeProxyKey,
+			Timeout:  10 * time.Minute,
+		})
+	} else {
+		// Use local executor for direct Claude CLI execution
+		log.Printf("Initializing local Claude executor: %s", config.ClaudeBin)
+		claudeExecutor = services.NewLocalClaudeExecutor(config.ClaudeBin)
+	}
+
+	// Test Claude connection
+	if err := claudeExecutor.TestConnection(); err != nil {
+		log.Printf("Warning: Claude executor test failed: %v", err)
+		if config.ClaudeProxyURL != "" {
+			log.Println("Make sure the Claude proxy service is running and accessible")
+		} else {
+			log.Println("Make sure the 'claude' CLI is installed and accessible")
+		}
 	}
 
 	// Initialize handlers
-	chatHandler := handlers.NewChatHandler(sessionManager, claudeService)
+	chatHandler := handlers.NewChatHandler(sessionManager, claudeExecutor)
 	wsHandler := handlers.NewWebSocketHandler(chatHandler)
 
 	// Create Fiber app
