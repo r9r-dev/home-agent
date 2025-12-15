@@ -147,6 +147,17 @@ function createChatStore() {
     },
 
     /**
+     * Load messages from an existing session
+     */
+    loadMessages: (sessionId: string, loadedMessages: Message[]) => {
+      update((state) => ({
+        ...state,
+        messages: loadedMessages,
+        currentSessionId: sessionId,
+      }));
+    },
+
+    /**
      * Set connection status
      */
     setConnected: (isConnected: boolean) => {

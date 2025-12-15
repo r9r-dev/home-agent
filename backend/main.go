@@ -144,6 +144,41 @@ func main() {
 		})
 	})
 
+	// Sessions API
+	app.Get("/api/sessions", func(c *fiber.Ctx) error {
+		sessions, err := sessionManager.ListSessions()
+		if err != nil {
+			return c.Status(500).JSON(fiber.Map{"error": err.Error()})
+		}
+		return c.JSON(sessions)
+	})
+
+	app.Get("/api/sessions/:id", func(c *fiber.Ctx) error {
+		sessionID := c.Params("id")
+		session, err := sessionManager.GetSession(sessionID)
+		if err != nil {
+			return c.Status(404).JSON(fiber.Map{"error": err.Error()})
+		}
+		return c.JSON(session)
+	})
+
+	app.Get("/api/sessions/:id/messages", func(c *fiber.Ctx) error {
+		sessionID := c.Params("id")
+		messages, err := sessionManager.GetMessages(sessionID)
+		if err != nil {
+			return c.Status(500).JSON(fiber.Map{"error": err.Error()})
+		}
+		return c.JSON(messages)
+	})
+
+	app.Delete("/api/sessions/:id", func(c *fiber.Ctx) error {
+		sessionID := c.Params("id")
+		if err := sessionManager.DeleteSession(sessionID); err != nil {
+			return c.Status(500).JSON(fiber.Map{"error": err.Error()})
+		}
+		return c.JSON(fiber.Map{"deleted": sessionID})
+	})
+
 	// Register WebSocket routes
 	wsHandler.RegisterRoutes(app)
 
