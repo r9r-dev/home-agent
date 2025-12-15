@@ -98,6 +98,7 @@ func (cs *ClaudeService) ExecuteClaude(ctx context.Context, prompt string, sessi
 		"--verbose",
 		"--model", "sonnet",
 		"--system-prompt", systemPrompt,
+		"--dangerously-skip-permissions",
 	}
 
 	// Add resume flag if session ID is provided

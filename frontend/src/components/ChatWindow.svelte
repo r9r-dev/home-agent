@@ -5,6 +5,9 @@
   import MessageList from './MessageList.svelte';
   import InputBox from './InputBox.svelte';
 
+  // App version
+  const APP_VERSION = '0.3.1';
+
   // Subscribe to store
   let state = $chatStore;
   $: state = $chatStore;
@@ -189,6 +192,10 @@
   <MessageList messages={state.messages} isTyping={state.isTyping} />
 
   <InputBox bind:this={inputBox} onSend={handleSendMessage} disabled={!state.isConnected || state.isTyping} />
+
+  <footer class="app-footer">
+    <span>v{APP_VERSION}</span>
+  </footer>
 </div>
 
 <style>
@@ -276,6 +283,16 @@
     border-bottom: 1px solid var(--color-error);
     color: var(--color-error);
     font-size: 0.875rem;
+  }
+
+  .app-footer {
+    padding: 0.5rem 1rem;
+    text-align: center;
+    font-size: 0.625rem;
+    color: var(--color-text-tertiary);
+    font-family: var(--font-family-mono);
+    border-top: 1px solid var(--color-border);
+    background: var(--color-bg-primary);
   }
 
   /* Responsive */
