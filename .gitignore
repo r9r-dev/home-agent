@@ -1,6 +1,10 @@
 # Backend
 backend/public/
 backend/home-agent
+
+# Claude Proxy
+claude-proxy/claude-proxy
+claude-proxy/build/
 *.exe
 *.exe~
 *.dll
@@ -14,6 +18,10 @@ go.work
 frontend/node_modules/
 frontend/dist/
 frontend/.svelte-kit/
+
+# Claude
+.changelog/
+.workspace/
 
 # Data
 data/*.db
