@@ -30,12 +30,13 @@
   }
 
   /**
-   * Format timestamp
+   * Format timestamp (24h format)
    */
   function formatTime(date: Date): string {
-    return new Intl.DateTimeFormat('en-US', {
+    return new Intl.DateTimeFormat('fr-FR', {
       hour: '2-digit',
       minute: '2-digit',
+      hour12: false,
     }).format(date);
   }
 
