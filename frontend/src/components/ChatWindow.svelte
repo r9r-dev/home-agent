@@ -125,7 +125,7 @@
       return { text: 'Erreur', color: 'var(--color-error)' };
     }
     if ($chatStore.isConnected) {
-      return { text: 'Connecte', color: 'var(--color-success)' };
+      return { text: 'Connecté', color: 'var(--color-success)' };
     }
     return { text: 'Connexion...', color: 'var(--color-warning)' };
   })();
