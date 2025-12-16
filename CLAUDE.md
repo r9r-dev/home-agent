@@ -50,8 +50,20 @@ git tag v0.x.x && git push origin v0.x.x
 ### Three Main Components
 
 1. **Backend** (`backend/`) - Go + Fiber HTTP/WebSocket server
-2. **Frontend** (`frontend/`) - Svelte SPA with TypeScript
+2. **Frontend** (`frontend/`) - Svelte 5 SPA with TypeScript, Tailwind CSS v4, shadcn-svelte
 3. **Claude Proxy** (`claude-proxy/`) - Standalone service that executes Claude CLI on behalf of containerized clients
+
+### Frontend Stack (v0.9.0+)
+- **Svelte 5** with runes syntax (`$props`, `$state`, `$derived`, `$effect`)
+- **Tailwind CSS v4** via `@tailwindcss/vite` plugin
+- **shadcn-svelte** UI components (bits-ui primitives)
+- **Lucide icons** (`@lucide/svelte`)
+
+Key directories:
+- `src/components/` - App components (ChatWindow, Sidebar, MessageList, etc.)
+- `src/lib/components/ui/` - shadcn-svelte components (button, select, badge, etc.)
+- `src/stores/` - Svelte stores for state management
+- `src/services/` - API and WebSocket clients
 
 ### Backend Key Files
 - `main.go` - HTTP server, routes, middleware, initializes ClaudeExecutor based on config
