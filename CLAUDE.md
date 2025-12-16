@@ -64,6 +64,8 @@ Layout & Styling Notes (v0.9.1+):
 - MessageList ScrollArea requires `min-h-0` class for constrained height behavior
 - Always-visible scrollbar styled with theme variables in `app.css` for consistent look
 - Markdown content uses `white-space: pre-wrap` for proper text spacing preservation
+- ScrollArea uses bits-ui data attributes `[data-scroll-area-scrollbar]` and `[data-scroll-area-thumb]` for CSS styling in `app.css`
+- Always-visible scrollbar configured via global CSS, not component classes (to survive shadcn updates)
 
 UI Enhancements (v0.10.0+):
 - Collapsible sidebar with toggle button (state persisted in localStorage via `sidebarStore`)
