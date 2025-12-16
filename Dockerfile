@@ -25,9 +25,6 @@ FROM golang:1.21-alpine AS backend-builder
 
 WORKDIR /app
 
-# Install build dependencies (including CGO for sqlite)
-RUN apk add --no-cache git gcc musl-dev sqlite-dev
-
 # Copy go mod files
 COPY backend/go.* ./
 RUN --mount=type=cache,target=/go/pkg/mod go mod download
@@ -35,18 +32,18 @@ RUN --mount=type=cache,target=/go/pkg/mod go mod download
 # Copy backend source
 COPY backend/ ./
 
-# Build backend binary (CGO required for sqlite) with cache
+# Build backend binary (pure Go SQLite, no CGO needed)
 # Note: frontend files are copied directly to runtime stage, not here
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
-    CGO_ENABLED=1 GOOS=linux go build -ldflags="-s -w" -o home-agent .
+    CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o home-agent .
 
 # Stage 2: Runtime image (minimal Alpine, no Node.js needed)
 # This stage waits for both builders to complete, then combines their outputs
 FROM alpine:3.19
 
-# Install runtime dependencies only
-RUN apk add --no-cache ca-certificates tzdata curl sqlite-libs
+# Install runtime dependencies only (no sqlite-libs needed with pure Go SQLite)
+RUN apk add --no-cache ca-certificates tzdata curl
 
 # Create non-root user
 RUN adduser -D -H -u 1000 appuser

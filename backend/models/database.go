@@ -6,7 +6,7 @@ import (
 	"log"
 	"time"
 
-	_ "github.com/mattn/go-sqlite3"
+	_ "modernc.org/sqlite"
 )
 
 // Session represents a conversation session with Claude Code
@@ -37,7 +37,7 @@ type DB struct {
 func InitDB(dbPath string) (*DB, error) {
 	log.Printf("Initializing database at: %s", dbPath)
 
-	conn, err := sql.Open("sqlite3", dbPath)
+	conn, err := sql.Open("sqlite", dbPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database: %w", err)
 	}
