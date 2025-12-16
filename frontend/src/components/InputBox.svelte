@@ -100,8 +100,6 @@
   </div>
   {#if disabled}
     <div class="hint">En attente de reponse...</div>
-  {:else}
-    <div class="hint">Entree pour envoyer, Maj+Entree pour nouvelle ligne</div>
   {/if}
 </div>
 

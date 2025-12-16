@@ -353,7 +353,6 @@
     font-size: 0.625rem;
     color: var(--color-text-tertiary);
     font-family: var(--font-family-mono);
-    border-top: 1px solid var(--color-border);
     background: var(--color-bg-primary);
   }
 
