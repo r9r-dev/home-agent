@@ -25,6 +25,9 @@ FROM golang:1.21-alpine AS backend-builder
 
 WORKDIR /app
 
+# Git needed for some Go modules
+RUN apk add --no-cache git
+
 # Copy go mod files
 COPY backend/go.* ./
 RUN --mount=type=cache,target=/go/pkg/mod go mod download
