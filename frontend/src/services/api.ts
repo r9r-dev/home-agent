@@ -21,6 +21,15 @@ export interface Message {
   created_at: string;
 }
 
+export interface UploadedFile {
+  id: string;
+  filename: string;
+  path: string;
+  type: 'image' | 'file';
+  size: number;
+  mime_type: string;
+}
+
 const API_BASE = '/api';
 
 /**
@@ -83,5 +92,45 @@ export async function updateSessionModel(sessionId: string, model: ClaudeModel):
   });
   if (!response.ok) {
     throw new Error('Failed to update session model');
+  }
+}
+
+/**
+ * Upload a file
+ */
+export async function uploadFile(file: File, sessionId?: string): Promise<UploadedFile> {
+  const formData = new FormData();
+  formData.append('file', file);
+  if (sessionId) {
+    formData.append('session_id', sessionId);
+  }
+
+  const response = await fetch(`${API_BASE}/upload`, {
+    method: 'POST',
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: 'Upload failed' }));
+    throw new Error(error.error || 'Failed to upload file');
+  }
+
+  return response.json();
+}
+
+/**
+ * Delete an uploaded file
+ */
+export async function deleteUploadedFile(fileId: string, sessionId?: string): Promise<void> {
+  const url = sessionId
+    ? `${API_BASE}/uploads/${fileId}?session_id=${sessionId}`
+    : `${API_BASE}/uploads/${fileId}`;
+
+  const response = await fetch(url, {
+    method: 'DELETE',
+  });
+
+  if (!response.ok) {
+    throw new Error('Failed to delete file');
   }
 }

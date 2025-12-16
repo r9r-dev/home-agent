@@ -2,8 +2,9 @@
   import { onMount, tick } from 'svelte';
   import { marked } from 'marked';
   import hljs from 'highlight.js';
-  import type { Message } from '../stores/chatStore';
+  import type { Message, MessageAttachment } from '../stores/chatStore';
   import { ScrollArea } from "$lib/components/ui/scroll-area";
+  import Icon from "@iconify/svelte";
 
   interface Props {
     messages?: Message[];
@@ -163,9 +164,37 @@
         >
           <div class="{message.role === 'user' ? 'bg-muted border border-border rounded-lg px-5 py-4' : ''}">
             {#if message.role === 'user'}
-              <div class="text-sm leading-relaxed font-mono whitespace-pre-wrap text-foreground">
-                {message.content}
-              </div>
+              <!-- User message with potential attachments -->
+              {#if message.attachments && message.attachments.length > 0}
+                <div class="flex flex-wrap gap-2 mb-3">
+                  {#each message.attachments as attachment (attachment.id)}
+                    {#if attachment.type === 'image'}
+                      <a href={attachment.path} target="_blank" rel="noopener noreferrer" class="block">
+                        <img
+                          src={attachment.path}
+                          alt={attachment.filename}
+                          class="max-w-[200px] max-h-[150px] rounded border border-border object-cover hover:opacity-90 transition-opacity"
+                        />
+                      </a>
+                    {:else}
+                      <a
+                        href={attachment.path}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        class="flex items-center gap-2 bg-background border border-border rounded px-3 py-2 hover:bg-muted transition-colors"
+                      >
+                        <Icon icon="mynaui:file" class="size-4 text-muted-foreground" />
+                        <span class="text-xs font-mono truncate max-w-[150px]">{attachment.filename}</span>
+                      </a>
+                    {/if}
+                  {/each}
+                </div>
+              {/if}
+              {#if message.content}
+                <div class="text-sm leading-relaxed font-mono whitespace-pre-wrap text-foreground">
+                  {message.content}
+                </div>
+              {/if}
             {:else}
               <div class="text-sm leading-relaxed font-mono markdown-body text-foreground">
                 {@html renderMarkdown(message.content)}

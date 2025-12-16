@@ -8,6 +8,14 @@ export type ErrorHandler = (error: Event) => void;
 export type CloseHandler = (event: CloseEvent) => void;
 export type OpenHandler = () => void;
 
+export interface MessageAttachment {
+  id: string;
+  filename: string;
+  path: string;
+  type: 'image' | 'file';
+  mime_type?: string;
+}
+
 interface WebSocketConfig {
   url: string;
   reconnectInterval?: number;
@@ -138,13 +146,19 @@ export class WebSocketService {
   /**
    * Send a message to the server
    */
-  sendMessage(content: string, sessionId?: string, model?: string): void {
+  sendMessage(content: string, sessionId?: string, model?: string, attachments?: MessageAttachment[]): void {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       console.error('[WebSocket] Cannot send message: not connected');
       throw new Error('WebSocket is not connected');
     }
 
-    const message: { type: string; content: string; sessionId?: string; model?: string } = {
+    const message: {
+      type: string;
+      content: string;
+      sessionId?: string;
+      model?: string;
+      attachments?: MessageAttachment[];
+    } = {
       type: 'message',
       content,
     };
@@ -157,8 +171,12 @@ export class WebSocketService {
       message.model = model;
     }
 
+    if (attachments && attachments.length > 0) {
+      message.attachments = attachments;
+    }
+
     this.ws.send(JSON.stringify(message));
-    console.log('[WebSocket] Message sent (sessionId:', sessionId || 'none', ', model:', model || 'default', ')');
+    console.log('[WebSocket] Message sent (sessionId:', sessionId || 'none', ', model:', model || 'default', ', attachments:', attachments?.length || 0, ')');
   }
 
   /**

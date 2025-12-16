@@ -24,11 +24,21 @@ func NewChatHandler(sessionManager *services.SessionManager, claudeExecutor serv
 	}
 }
 
+// MessageAttachment represents a file attached to a message
+type MessageAttachment struct {
+	ID       string `json:"id"`
+	Filename string `json:"filename"`
+	Path     string `json:"path"`
+	Type     string `json:"type"` // "image" or "file"
+	MimeType string `json:"mime_type,omitempty"`
+}
+
 // MessageRequest represents an incoming message from the client
 type MessageRequest struct {
-	Content   string `json:"content"`
-	SessionID string `json:"session_id,omitempty"`
-	Model     string `json:"model,omitempty"` // Claude model: haiku, sonnet, opus
+	Content     string              `json:"content"`
+	SessionID   string              `json:"session_id,omitempty"`
+	Model       string              `json:"model,omitempty"` // Claude model: haiku, sonnet, opus
+	Attachments []MessageAttachment `json:"attachments,omitempty"`
 }
 
 // MessageResponse represents a response chunk sent to the client
@@ -48,12 +58,15 @@ func (ch *ChatHandler) HandleMessage(ctx context.Context, request MessageRequest
 		model = "haiku"
 	}
 
-	log.Printf("HandleMessage: received message (length: %d), sessionID: %s, model: %s", len(request.Content), request.SessionID, model)
+	log.Printf("HandleMessage: received message (length: %d), sessionID: %s, model: %s, attachments: %d", len(request.Content), request.SessionID, model, len(request.Attachments))
 
-	// Validate input
-	if strings.TrimSpace(request.Content) == "" {
+	// Validate input - allow empty content if attachments are present
+	if strings.TrimSpace(request.Content) == "" && len(request.Attachments) == 0 {
 		return nil, fmt.Errorf("message content cannot be empty")
 	}
+
+	// Build prompt with attachments
+	prompt := ch.buildPromptWithAttachments(request.Content, request.Attachments)
 
 	// Get or create session with the specified model
 	sessionID, isNew, err := ch.sessionManager.GetOrCreateSessionWithModel(request.SessionID, model)
@@ -71,8 +84,13 @@ func (ch *ChatHandler) HandleMessage(ctx context.Context, request MessageRequest
 		}
 	}
 
-	// Save user message to database
-	if err := ch.sessionManager.SaveMessage(sessionID, "user", request.Content); err != nil {
+	// Save user message to database (save original content, not the augmented prompt)
+	userContent := request.Content
+	if len(request.Attachments) > 0 {
+		// Include attachment info in saved message for display
+		userContent = ch.buildDisplayContentWithAttachments(request.Content, request.Attachments)
+	}
+	if err := ch.sessionManager.SaveMessage(sessionID, "user", userContent); err != nil {
 		log.Printf("Warning: failed to save user message: %v", err)
 		// Don't fail the request, just log the error
 	}
@@ -91,7 +109,7 @@ func (ch *ChatHandler) HandleMessage(ctx context.Context, request MessageRequest
 			log.Printf("Using stored Claude session ID: %s", claudeSessionID)
 		}
 	}
-	claudeResponseChan, err := ch.claudeExecutor.ExecuteClaude(ctx, request.Content, claudeSessionID, model)
+	claudeResponseChan, err := ch.claudeExecutor.ExecuteClaude(ctx, prompt, claudeSessionID, model)
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute claude: %w", err)
 	}
@@ -241,4 +259,56 @@ func (ch *ChatHandler) ValidateSession(sessionID string) error {
 	}
 
 	return nil
+}
+
+// buildPromptWithAttachments builds a prompt that includes attachment information for Claude
+func (ch *ChatHandler) buildPromptWithAttachments(content string, attachments []MessageAttachment) string {
+	if len(attachments) == 0 {
+		return content
+	}
+
+	var sb strings.Builder
+
+	// Add attachment information
+	sb.WriteString("[Attached files:\n")
+	for _, att := range attachments {
+		sb.WriteString(fmt.Sprintf("- %s (%s)\n", att.Filename, att.Type))
+	}
+	sb.WriteString("]\n\n")
+
+	// Add the user's message
+	if content != "" {
+		sb.WriteString(content)
+	} else {
+		sb.WriteString("Please analyze the attached file(s).")
+	}
+
+	return sb.String()
+}
+
+// buildDisplayContentWithAttachments builds content for display that shows attachment info
+func (ch *ChatHandler) buildDisplayContentWithAttachments(content string, attachments []MessageAttachment) string {
+	if len(attachments) == 0 {
+		return content
+	}
+
+	var sb strings.Builder
+
+	// Add the user's message first
+	if content != "" {
+		sb.WriteString(content)
+		sb.WriteString("\n\n")
+	}
+
+	// Add attachment markers for frontend to parse
+	sb.WriteString("<!-- attachments:")
+	for i, att := range attachments {
+		if i > 0 {
+			sb.WriteString(",")
+		}
+		sb.WriteString(fmt.Sprintf("%s|%s|%s|%s", att.ID, att.Filename, att.Path, att.Type))
+	}
+	sb.WriteString(" -->")
+
+	return sb.String()
 }

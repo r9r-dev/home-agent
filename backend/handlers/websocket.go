@@ -23,12 +23,22 @@ func NewWebSocketHandler(chatHandler *ChatHandler) *WebSocketHandler {
 	}
 }
 
+// Attachment represents a file attachment in a message
+type Attachment struct {
+	ID       string `json:"id"`
+	Filename string `json:"filename"`
+	Path     string `json:"path"`
+	Type     string `json:"type"` // "image" or "file"
+	MimeType string `json:"mime_type,omitempty"`
+}
+
 // ClientMessage represents a message from the WebSocket client
 type ClientMessage struct {
-	Type      string `json:"type"`                // "message", "ping", "history"
-	Content   string `json:"content,omitempty"`   // Message content
-	SessionID string `json:"sessionId,omitempty"` // Optional session ID
-	Model     string `json:"model,omitempty"`     // Claude model: haiku, sonnet, opus
+	Type        string       `json:"type"`                  // "message", "ping", "history"
+	Content     string       `json:"content,omitempty"`     // Message content
+	SessionID   string       `json:"sessionId,omitempty"`   // Optional session ID
+	Model       string       `json:"model,omitempty"`       // Claude model: haiku, sonnet, opus
+	Attachments []Attachment `json:"attachments,omitempty"` // File attachments
 }
 
 // ServerMessage represents a message sent to the WebSocket client
@@ -140,13 +150,26 @@ func (wsh *WebSocketHandler) HandleWebSocket(c *websocket.Conn) {
 
 // handleChatMessage processes a chat message from the client
 func (wsh *WebSocketHandler) handleChatMessage(c *websocket.Conn, clientMsg ClientMessage, clientAddr string) {
-	log.Printf("Processing chat message from %s (sessionID: %s, model: %s)", clientAddr, clientMsg.SessionID, clientMsg.Model)
+	log.Printf("Processing chat message from %s (sessionID: %s, model: %s, attachments: %d)", clientAddr, clientMsg.SessionID, clientMsg.Model, len(clientMsg.Attachments))
+
+	// Convert attachments
+	attachments := make([]MessageAttachment, len(clientMsg.Attachments))
+	for i, a := range clientMsg.Attachments {
+		attachments[i] = MessageAttachment{
+			ID:       a.ID,
+			Filename: a.Filename,
+			Path:     a.Path,
+			Type:     a.Type,
+			MimeType: a.MimeType,
+		}
+	}
 
 	// Create message request
 	request := MessageRequest{
-		Content:   clientMsg.Content,
-		SessionID: clientMsg.SessionID,
-		Model:     clientMsg.Model,
+		Content:     clientMsg.Content,
+		SessionID:   clientMsg.SessionID,
+		Model:       clientMsg.Model,
+		Attachments: attachments,
 	}
 
 	// Create context with timeout

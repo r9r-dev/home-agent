@@ -20,10 +20,11 @@ import (
 
 // Config holds the application configuration
 type Config struct {
-	Port          string
-	DatabasePath  string
-	ClaudeBin     string
-	PublicDir     string
+	Port           string
+	DatabasePath   string
+	ClaudeBin      string
+	PublicDir      string
+	UploadDir      string // Directory for uploaded files
 	ClaudeProxyURL string // If set, use proxy instead of local CLI
 	ClaudeProxyKey string // API key for proxy authentication
 }
@@ -31,10 +32,11 @@ type Config struct {
 // loadConfig loads configuration from environment variables with defaults
 func loadConfig() Config {
 	config := Config{
-		Port:          getEnv("PORT", "8080"),
-		DatabasePath:  getEnv("DATABASE_PATH", "./data/homeagent.db"),
-		ClaudeBin:     getEnv("CLAUDE_BIN", "claude"),
-		PublicDir:     getEnv("PUBLIC_DIR", "./public"),
+		Port:           getEnv("PORT", "8080"),
+		DatabasePath:   getEnv("DATABASE_PATH", "./data/homeagent.db"),
+		ClaudeBin:      getEnv("CLAUDE_BIN", "claude"),
+		PublicDir:      getEnv("PUBLIC_DIR", "./public"),
+		UploadDir:      getEnv("UPLOAD_DIR", "./data/uploads"),
 		ClaudeProxyURL: getEnv("CLAUDE_PROXY_URL", ""),
 		ClaudeProxyKey: getEnv("CLAUDE_PROXY_KEY", ""),
 	}
@@ -43,6 +45,7 @@ func loadConfig() Config {
 	log.Printf("  Port: %s", config.Port)
 	log.Printf("  Database: %s", config.DatabasePath)
 	log.Printf("  Public directory: %s", config.PublicDir)
+	log.Printf("  Upload directory: %s", config.UploadDir)
 
 	if config.ClaudeProxyURL != "" {
 		log.Printf("  Claude mode: proxy (%s)", config.ClaudeProxyURL)
@@ -72,8 +75,14 @@ func ensureDirectories(config Config) error {
 	if err := os.MkdirAll(dbDir, 0755); err != nil {
 		return fmt.Errorf("failed to create database directory: %w", err)
 	}
-
 	log.Printf("Database directory ensured: %s", dbDir)
+
+	// Ensure upload directory exists
+	if err := os.MkdirAll(config.UploadDir, 0755); err != nil {
+		return fmt.Errorf("failed to create upload directory: %w", err)
+	}
+	log.Printf("Upload directory ensured: %s", config.UploadDir)
+
 	return nil
 }
 
@@ -132,6 +141,7 @@ func main() {
 	// Initialize handlers
 	chatHandler := handlers.NewChatHandler(sessionManager, claudeExecutor)
 	wsHandler := handlers.NewWebSocketHandler(chatHandler)
+	uploadHandler := handlers.NewUploadHandler(config.UploadDir)
 
 	// Create Fiber app
 	app := fiber.New(fiber.Config{
@@ -238,6 +248,9 @@ func main() {
 
 	// Register WebSocket routes
 	wsHandler.RegisterRoutes(app)
+
+	// Register upload routes
+	uploadHandler.RegisterRoutes(app)
 
 	// Serve static files from public directory (for frontend)
 	// This should be last so WebSocket and API routes take precedence

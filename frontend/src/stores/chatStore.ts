@@ -5,11 +5,20 @@
 
 import { writable, derived } from 'svelte/store';
 
+export interface MessageAttachment {
+  id: string;
+  filename: string;
+  path: string;
+  type: 'image' | 'file';
+  mimeType?: string;
+}
+
 export interface Message {
   id: string;
   role: 'user' | 'assistant';
   content: string;
   timestamp: Date;
+  attachments?: MessageAttachment[];
 }
 
 export type ClaudeModel = 'haiku' | 'sonnet' | 'opus';
@@ -44,13 +53,14 @@ function createChatStore() {
     /**
      * Add a new message to the chat
      */
-    addMessage: (role: 'user' | 'assistant', content: string) => {
+    addMessage: (role: 'user' | 'assistant', content: string, attachments?: MessageAttachment[]) => {
       update((state) => {
         const newMessage: Message = {
           id: crypto.randomUUID(),
           role,
           content,
           timestamp: new Date(),
+          attachments,
         };
         return {
           ...state,

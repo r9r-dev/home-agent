@@ -3,18 +3,38 @@
   import { Textarea } from "$lib/components/ui/textarea";
   import { Button } from "$lib/components/ui/button";
   import Icon from "@iconify/svelte";
+  import { uploadFile, type UploadedFile } from '../services/api';
 
   // Props
   interface Props {
     disabled?: boolean;
-    onSend: (message: string) => void;
+    onSend: (message: string, attachments?: UploadedFile[]) => void;
+    sessionId?: string | null;
   }
 
-  let { disabled = false, onSend }: Props = $props();
+  let { disabled = false, onSend, sessionId = null }: Props = $props();
 
   // Local state
   let textareaRef = $state<HTMLTextAreaElement | null>(null);
+  let fileInputRef = $state<HTMLInputElement | null>(null);
   let message = $state('');
+  let attachments = $state<UploadedFile[]>([]);
+  let isUploading = $state(false);
+  let uploadError = $state<string | null>(null);
+
+  // Allowed file types
+  const ALLOWED_TYPES = [
+    'image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp',
+    'application/pdf', 'text/plain', 'text/markdown', 'application/json',
+    'text/csv', 'text/html', 'text/css', 'text/javascript', 'application/javascript'
+  ];
+
+  const ALLOWED_EXTENSIONS = [
+    '.png', '.jpg', '.jpeg', '.gif', '.webp',
+    '.pdf', '.txt', '.md', '.json', '.csv',
+    '.html', '.css', '.js', '.ts', '.go', '.py', '.rs', '.java',
+    '.c', '.cpp', '.h', '.sh', '.sql', '.log', '.xml', '.yaml', '.yml'
+  ];
 
   /**
    * Auto-resize textarea based on content
@@ -36,10 +56,12 @@
    * Handle send button click
    */
   function handleSend() {
-    if (!message.trim() || disabled) return;
+    if ((!message.trim() && attachments.length === 0) || disabled || isUploading) return;
 
-    onSend(message.trim());
+    onSend(message.trim(), attachments.length > 0 ? attachments : undefined);
     message = '';
+    attachments = [];
+    uploadError = null;
 
     // Reset textarea height
     if (textareaRef) {
@@ -59,6 +81,83 @@
   }
 
   /**
+   * Open file picker
+   */
+  function openFilePicker() {
+    fileInputRef?.click();
+  }
+
+  /**
+   * Validate file type
+   */
+  function isValidFile(file: File): boolean {
+    // Check MIME type
+    if (ALLOWED_TYPES.includes(file.type)) {
+      return true;
+    }
+    // Check extension as fallback
+    const ext = '.' + file.name.split('.').pop()?.toLowerCase();
+    return ALLOWED_EXTENSIONS.includes(ext);
+  }
+
+  /**
+   * Handle file selection
+   */
+  async function handleFileSelect(event: Event) {
+    const input = event.target as HTMLInputElement;
+    const files = input.files;
+    if (!files || files.length === 0) return;
+
+    uploadError = null;
+    isUploading = true;
+
+    try {
+      for (const file of files) {
+        // Validate file type
+        if (!isValidFile(file)) {
+          uploadError = `Type de fichier non supporté: ${file.name}`;
+          continue;
+        }
+
+        // Check file size (10MB max)
+        if (file.size > 10 * 1024 * 1024) {
+          uploadError = `Fichier trop volumineux: ${file.name} (max 10MB)`;
+          continue;
+        }
+
+        // Upload file
+        const uploaded = await uploadFile(file, sessionId || undefined);
+        attachments = [...attachments, uploaded];
+      }
+    } catch (error) {
+      console.error('Upload error:', error);
+      uploadError = error instanceof Error ? error.message : 'Erreur lors de l\'upload';
+    } finally {
+      isUploading = false;
+      // Reset file input
+      if (fileInputRef) {
+        fileInputRef.value = '';
+      }
+    }
+  }
+
+  /**
+   * Remove an attachment
+   */
+  function removeAttachment(index: number) {
+    attachments = attachments.filter((_, i) => i !== index);
+  }
+
+  /**
+   * Format file size
+   */
+  function formatSize(bytes: number): string {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
+
+  /**
    * Focus the textarea (exported for parent components)
    */
   export function focus() {
@@ -74,7 +173,73 @@
 </script>
 
 <div class="p-6 pb-0 bg-background border-t border-border">
+  <!-- Attachments preview -->
+  {#if attachments.length > 0}
+    <div class="flex flex-wrap gap-2 mb-3 max-w-[900px] mx-auto">
+      {#each attachments as attachment, index (attachment.id)}
+        <div class="flex items-center gap-2 bg-muted border border-border rounded-lg px-3 py-2 text-sm">
+          {#if attachment.type === 'image'}
+            <img
+              src={attachment.path}
+              alt={attachment.filename}
+              class="w-8 h-8 object-cover rounded"
+            />
+          {:else}
+            <Icon icon="mynaui:file" class="size-5 text-muted-foreground" />
+          {/if}
+          <span class="truncate max-w-[150px] font-mono text-xs">{attachment.filename}</span>
+          <span class="text-muted-foreground text-xs">({formatSize(attachment.size)})</span>
+          <button
+            type="button"
+            onclick={() => removeAttachment(index)}
+            class="p-0.5 hover:bg-destructive/20 rounded transition-colors"
+            aria-label="Retirer le fichier"
+          >
+            <Icon icon="mynaui:x" class="size-4 text-muted-foreground hover:text-destructive" />
+          </button>
+        </div>
+      {/each}
+    </div>
+  {/if}
+
+  <!-- Upload error -->
+  {#if uploadError}
+    <div class="flex items-center gap-2 text-destructive text-sm mb-3 max-w-[900px] mx-auto">
+      <Icon icon="mynaui:danger-circle" class="size-4" />
+      <span>{uploadError}</span>
+    </div>
+  {/if}
+
+  <!-- Input area -->
   <div class="flex gap-3 items-center bg-muted border border-border rounded-lg px-4 py-3 max-w-[900px] mx-auto min-h-12 transition-colors focus-within:border-ring">
+    <!-- Hidden file input -->
+    <input
+      type="file"
+      bind:this={fileInputRef}
+      onchange={handleFileSelect}
+      multiple
+      accept={[...ALLOWED_TYPES, ...ALLOWED_EXTENSIONS].join(',')}
+      class="hidden"
+      aria-label="Sélectionner des fichiers"
+    />
+
+    <!-- Attachment button -->
+    <Button
+      variant="ghost"
+      size="icon-sm"
+      onclick={openFilePicker}
+      disabled={disabled || isUploading}
+      aria-label="Joindre un fichier"
+      type="button"
+      class="text-muted-foreground hover:text-foreground"
+    >
+      {#if isUploading}
+        <Icon icon="mynaui:spinner" class="size-5 animate-spin" />
+      {:else}
+        <Icon icon="mynaui:paperclip" class="size-5" />
+      {/if}
+    </Button>
+
     <Textarea
       bind:ref={textareaRef}
       bind:value={message}
@@ -82,7 +247,7 @@
       onkeydown={handleKeyDown}
       placeholder="Ecrivez votre message..."
       rows={1}
-      {disabled}
+      disabled={disabled || isUploading}
       aria-label="Message input"
       class="flex-1 bg-transparent border-none shadow-none p-0 min-h-5 max-h-[200px] resize-none focus-visible:ring-0 focus-visible:border-none text-sm font-mono"
     />
@@ -90,7 +255,7 @@
       variant="outline"
       size="icon-sm"
       onclick={handleSend}
-      disabled={disabled || !message.trim()}
+      disabled={disabled || isUploading || (!message.trim() && attachments.length === 0)}
       aria-label="Send message"
       type="button"
     >

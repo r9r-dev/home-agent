@@ -4,9 +4,9 @@
 
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
-  import { chatStore, type ClaudeModel } from '../stores/chatStore';
-  import { websocketService } from '../services/websocket';
-  import { fetchMessages, fetchSession, type Message as ApiMessage } from '../services/api';
+  import { chatStore, type ClaudeModel, type MessageAttachment } from '../stores/chatStore';
+  import { websocketService, type MessageAttachment as WsAttachment } from '../services/websocket';
+  import { fetchMessages, fetchSession, type Message as ApiMessage, type UploadedFile } from '../services/api';
   import MessageList from './MessageList.svelte';
   import InputBox from './InputBox.svelte';
   import Sidebar from './Sidebar.svelte';
@@ -103,14 +103,32 @@
   /**
    * Send a message
    */
-  function handleSendMessage(content: string) {
-    if (!content.trim() || !state.isConnected) {
+  function handleSendMessage(content: string, attachments?: UploadedFile[]) {
+    if ((!content.trim() && (!attachments || attachments.length === 0)) || !state.isConnected) {
       return;
     }
 
     try {
-      chatStore.addMessage('user', content);
-      websocketService.sendMessage(content, state.currentSessionId || undefined, state.selectedModel);
+      // Convert UploadedFile to MessageAttachment for store
+      const storeAttachments: MessageAttachment[] | undefined = attachments?.map(a => ({
+        id: a.id,
+        filename: a.filename,
+        path: a.path,
+        type: a.type,
+        mimeType: a.mime_type,
+      }));
+
+      // Convert to WebSocket format
+      const wsAttachments: WsAttachment[] | undefined = attachments?.map(a => ({
+        id: a.id,
+        filename: a.filename,
+        path: a.path,
+        type: a.type,
+        mime_type: a.mime_type,
+      }));
+
+      chatStore.addMessage('user', content, storeAttachments);
+      websocketService.sendMessage(content, state.currentSessionId || undefined, state.selectedModel, wsAttachments);
       chatStore.setError(null);
     } catch (error) {
       console.error('[ChatWindow] Failed to send message:', error);
@@ -251,7 +269,7 @@
 
     <MessageList messages={state.messages} isTyping={state.isTyping} />
 
-    <InputBox bind:this={inputBox} onSend={handleSendMessage} disabled={!state.isConnected || state.isTyping} />
+    <InputBox bind:this={inputBox} onSend={handleSendMessage} disabled={!state.isConnected || state.isTyping} sessionId={state.currentSessionId} />
 
     <footer class="py-2 px-4 text-center text-[0.625rem] text-muted-foreground font-mono bg-background">
       v{APP_VERSION}
