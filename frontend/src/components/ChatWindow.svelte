@@ -14,7 +14,7 @@
   import { Badge } from "$lib/components/ui/badge";
   import { Button } from "$lib/components/ui/button";
   import * as Alert from "$lib/components/ui/alert";
-  import CircleAlertIcon from "@lucide/svelte/icons/circle-alert";
+  import Icon from "@iconify/svelte";
 
   // App version (injected by Vite from package.json)
   const APP_VERSION = __APP_VERSION__;
@@ -231,8 +231,11 @@
             Containers
           </Button>
           <ModelSelector />
-          <Badge variant={connectionStatus.color === 'destructive' ? 'destructive' : connectionStatus.color === 'default' ? 'default' : 'secondary'} class="gap-2 px-3 py-1.5">
-            <span class="w-1.5 h-1.5 rounded-full {connectionStatus.color === 'destructive' ? 'bg-destructive-foreground' : connectionStatus.color === 'default' ? 'bg-primary-foreground' : 'bg-secondary-foreground'}"></span>
+          <Badge
+            variant="outline"
+            class="gap-2 px-3 py-1.5 bg-black text-white border-black dark:bg-white dark:text-black dark:border-white"
+          >
+            <span class="w-1.5 h-1.5 rounded-full {connectionStatus.color === 'destructive' ? 'bg-red-500' : connectionStatus.color === 'default' ? 'bg-green-500' : 'bg-gray-400'}"></span>
             {connectionStatus.text}
           </Badge>
         </nav>
@@ -241,7 +244,7 @@
 
     {#if state.error}
       <Alert.Root variant="destructive" class="rounded-none border-x-0 border-t-0">
-        <CircleAlertIcon class="size-4" />
+        <Icon icon="mynaui:danger-circle" class="size-4" />
         <Alert.Description>{state.error}</Alert.Description>
       </Alert.Root>
     {/if}

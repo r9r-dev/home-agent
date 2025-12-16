@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { Textarea } from "$lib/components/ui/textarea";
   import { Button } from "$lib/components/ui/button";
-  import SendIcon from "@lucide/svelte/icons/send";
+  import Icon from "@iconify/svelte";
 
   // Props
   interface Props {
@@ -94,7 +94,7 @@
       aria-label="Send message"
       type="button"
     >
-      <SendIcon class="size-4" />
+      <Icon icon="mynaui:send" class="size-4" />
     </Button>
   </div>
   {#if disabled}

@@ -57,13 +57,21 @@ git tag v0.x.x && git push origin v0.x.x
 - **Svelte 5** with runes syntax (`$props`, `$state`, `$derived`, `$effect`)
 - **Tailwind CSS v4** via `@tailwindcss/vite` plugin
 - **shadcn-svelte** UI components (bits-ui primitives)
-- **Lucide icons** (`@lucide/svelte`)
+- **MynaUI icons** via `@iconify/svelte` (e.g., `<Icon icon="mynaui:edit-one" />`)
 
 Layout & Styling Notes (v0.9.1+):
 - ChatWindow uses flexbox with `min-h-0` on flex children to enable proper vertical scrolling
 - MessageList ScrollArea requires `min-h-0` class for constrained height behavior
 - Always-visible scrollbar styled with theme variables in `app.css` for consistent look
 - Markdown content uses `white-space: pre-wrap` for proper text spacing preservation
+
+UI Enhancements (v0.10.0+):
+- Collapsible sidebar with toggle button (state persisted in localStorage via `sidebarStore`)
+- Sidebar split into two sections: actions ("Nouveau chat", "Rechercher") and chat history ("Vos chats")
+- Collapsed sidebar width: 64px, expanded: 260px with smooth transition
+- Connection badge: black background with white text, green dot when connected
+- Conversation titles generated in French via modified backend prompt
+- Cal Sans font for conversation titles (local woff2 in `/public/fonts/`)
 
 Key directories:
 - `src/components/` - App components (ChatWindow, Sidebar, MessageList, etc.)

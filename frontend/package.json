@@ -1,6 +1,6 @@
 {
   "name": "home-agent-frontend",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -10,7 +10,6 @@
   },
   "devDependencies": {
     "@internationalized/date": "^3.10.0",
-    "@lucide/svelte": "^0.561.0",
     "@sveltejs/vite-plugin-svelte": "^6.0.0",
     "@tailwindcss/vite": "^4.0.0",
     "@tsconfig/svelte": "^5.0.0",
@@ -27,6 +26,7 @@
     "vite": "^6.0.0"
   },
   "dependencies": {
+    "@iconify/svelte": "^5.1.0",
     "highlight.js": "^11.9.0",
     "marked": "^11.1.0"
   }

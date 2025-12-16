@@ -343,9 +343,9 @@ func (lce *LocalClaudeExecutor) GenerateTitleSummary(userMessage, assistantRespo
 		assistantResponse = assistantResponse[:500]
 	}
 
-	prompt := "Generate a very short title (max 40 characters) that summarizes this conversation. " +
-		"Respond with ONLY the title, no quotes, no explanation.\n\n" +
-		"User: " + userMessage + "\n\n" +
+	prompt := "Genere un titre tres court (maximum 40 caracteres) qui resume cette conversation. " +
+		"Reponds UNIQUEMENT avec le titre, sans guillemets, sans explication.\n\n" +
+		"Utilisateur: " + userMessage + "\n\n" +
 		"Assistant: " + assistantResponse
 
 	// Use haiku model for quick title generation
