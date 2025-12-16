@@ -4,6 +4,7 @@
   import { Button } from "$lib/components/ui/button";
   import { ScrollArea } from "$lib/components/ui/scroll-area";
   import { Separator } from "$lib/components/ui/separator";
+  import * as Dialog from "$lib/components/ui/dialog";
   import { sidebarStore } from '../stores/sidebarStore';
   import Icon from "@iconify/svelte";
 
@@ -19,6 +20,10 @@
   let loading = $state(true);
   let isCollapsed = $derived($sidebarStore);
 
+  // Delete confirmation dialog state
+  let deleteDialogOpen = $state(false);
+  let sessionToDelete = $state<string | null>(null);
+
   async function loadSessions() {
     try {
       sessions = await fetchSessions();
@@ -29,19 +34,32 @@
     }
   }
 
-  async function handleDelete(sessionId: string, event: Event) {
+  function openDeleteDialog(sessionId: string, event: Event) {
     event.stopPropagation();
-    if (!confirm('Supprimer cette conversation ?')) return;
+    sessionToDelete = sessionId;
+    deleteDialogOpen = true;
+  }
+
+  async function confirmDelete() {
+    if (!sessionToDelete) return;
 
     try {
-      await deleteSession(sessionId);
-      sessions = sessions.filter(s => s.session_id !== sessionId);
-      if (currentSessionId === sessionId) {
+      await deleteSession(sessionToDelete);
+      sessions = sessions.filter(s => s.session_id !== sessionToDelete);
+      if (currentSessionId === sessionToDelete) {
         onNewConversation();
       }
     } catch (error) {
       console.error('Failed to delete session:', error);
+    } finally {
+      deleteDialogOpen = false;
+      sessionToDelete = null;
     }
+  }
+
+  function cancelDelete() {
+    deleteDialogOpen = false;
+    sessionToDelete = null;
   }
 
   function formatDate(dateStr: string): string {
@@ -151,7 +169,7 @@
                 </span>
               {:else}
                 <div class="flex-1 min-w-0 flex flex-col gap-1">
-                  <span class="text-[0.8125rem] text-sidebar-foreground leading-snug" style="font-family: 'Cal Sans', sans-serif;">
+                  <span class="text-[0.8125rem] text-sidebar-foreground leading-snug font-cal">
                     {session.title || 'Sans titre'}
                   </span>
                   <span class="text-[0.625rem] text-muted-foreground">
@@ -161,7 +179,7 @@
                 <Button
                   variant="ghost"
                   size="icon"
-                  onclick={(e: Event) => handleDelete(session.session_id, e)}
+                  onclick={(e: Event) => openDeleteDialog(session.session_id, e)}
                   title="Supprimer"
                   class="opacity-0 group-hover:opacity-100 hover:text-destructive h-7 w-7"
                 >
@@ -175,3 +193,23 @@
     </ScrollArea>
   </div>
 </aside>
+
+<!-- Delete confirmation dialog -->
+<Dialog.Root bind:open={deleteDialogOpen}>
+  <Dialog.Content class="sm:max-w-[425px]">
+    <Dialog.Header>
+      <Dialog.Title>Supprimer la conversation</Dialog.Title>
+      <Dialog.Description>
+        Etes-vous sur de vouloir supprimer cette conversation ? Cette action est irreversible.
+      </Dialog.Description>
+    </Dialog.Header>
+    <Dialog.Footer>
+      <Button variant="outline" onclick={cancelDelete}>
+        Annuler
+      </Button>
+      <Button variant="destructive" onclick={confirmDelete}>
+        Supprimer
+      </Button>
+    </Dialog.Footer>
+  </Dialog.Content>
+</Dialog.Root>

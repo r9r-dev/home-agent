@@ -131,16 +131,29 @@
   }
 }
 
-/* Always visible scrollbar for message area */
+/* Cal Sans title class - use regular weight for lighter appearance */
+.font-cal {
+  font-family: 'Cal Sans', sans-serif;
+  font-weight: 400;
+}
+
+/* Always visible scrollbar */
 [data-slot="scroll-area-scrollbar"] {
   opacity: 1 !important;
+  display: flex !important;
+  visibility: visible !important;
+}
+
+[data-slot="scroll-area-scrollbar"][data-orientation="vertical"] {
+  width: 8px !important;
 }
 
 [data-slot="scroll-area-thumb"] {
-  background-color: hsl(var(--muted-foreground) / 0.3) !important;
+  background-color: hsl(var(--muted-foreground) / 0.4) !important;
+  min-height: 40px !important;
   transition: background-color 0.2s ease;
 }
 
 [data-slot="scroll-area-thumb"]:hover {
-  background-color: hsl(var(--muted-foreground) / 0.5) !important;
+  background-color: hsl(var(--muted-foreground) / 0.6) !important;
 }
