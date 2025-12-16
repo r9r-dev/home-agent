@@ -86,8 +86,14 @@ Respond in the same language as the user.`
 
 // ExecuteClaude executes the Claude Code CLI and streams the response
 // If sessionID is provided, it resumes the existing session
-func (lce *LocalClaudeExecutor) ExecuteClaude(ctx context.Context, prompt string, sessionID string) (<-chan ClaudeResponse, error) {
-	log.Printf("Executing Claude with prompt (length: %d), sessionID: %s", len(prompt), sessionID)
+// Model can be "haiku", "sonnet", or "opus" (defaults to "haiku" if empty)
+func (lce *LocalClaudeExecutor) ExecuteClaude(ctx context.Context, prompt string, sessionID string, model string) (<-chan ClaudeResponse, error) {
+	// Default to haiku if model not specified
+	if model == "" {
+		model = "haiku"
+	}
+
+	log.Printf("Executing Claude with prompt (length: %d), sessionID: %s, model: %s", len(prompt), sessionID, model)
 
 	// Create a context with timeout
 	ctx, cancel := context.WithTimeout(ctx, lce.timeout)
@@ -97,7 +103,7 @@ func (lce *LocalClaudeExecutor) ExecuteClaude(ctx context.Context, prompt string
 		"-p", prompt,
 		"--output-format", "stream-json",
 		"--verbose",
-		"--model", "sonnet",
+		"--model", model,
 		"--system-prompt", systemPrompt,
 		"--dangerously-skip-permissions",
 	}

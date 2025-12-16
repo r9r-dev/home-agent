@@ -36,6 +36,7 @@ type ProxyRequest struct {
 	Type      string `json:"type"`                 // "execute"
 	Prompt    string `json:"prompt"`               // The prompt to send to Claude
 	SessionID string `json:"session_id,omitempty"` // Optional session ID for resume
+	Model     string `json:"model,omitempty"`      // Claude model: haiku, sonnet, opus
 }
 
 // ProxyResponse represents a response from the proxy
@@ -94,8 +95,13 @@ func NewProxyClaudeExecutor(config ProxyConfig) *ProxyClaudeExecutor {
 }
 
 // ExecuteClaude connects to the proxy service and streams Claude's response
-func (pce *ProxyClaudeExecutor) ExecuteClaude(ctx context.Context, prompt string, sessionID string) (<-chan ClaudeResponse, error) {
-	log.Printf("ProxyExecutor: Executing Claude via proxy, prompt length: %d, sessionID: %s", len(prompt), sessionID)
+func (pce *ProxyClaudeExecutor) ExecuteClaude(ctx context.Context, prompt string, sessionID string, model string) (<-chan ClaudeResponse, error) {
+	// Default to haiku if model not specified
+	if model == "" {
+		model = "haiku"
+	}
+
+	log.Printf("ProxyExecutor: Executing Claude via proxy, prompt length: %d, sessionID: %s, model: %s", len(prompt), sessionID, model)
 
 	responseChan := make(chan ClaudeResponse, 100)
 
@@ -123,6 +129,7 @@ func (pce *ProxyClaudeExecutor) ExecuteClaude(ctx context.Context, prompt string
 			Type:      "execute",
 			Prompt:    prompt,
 			SessionID: sessionID,
+			Model:     model,
 		}
 
 		if err := conn.WriteJSON(request); err != nil {

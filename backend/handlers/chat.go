@@ -28,6 +28,7 @@ func NewChatHandler(sessionManager *services.SessionManager, claudeExecutor serv
 type MessageRequest struct {
 	Content   string `json:"content"`
 	SessionID string `json:"session_id,omitempty"`
+	Model     string `json:"model,omitempty"` // Claude model: haiku, sonnet, opus
 }
 
 // MessageResponse represents a response chunk sent to the client
@@ -41,23 +42,33 @@ type MessageResponse struct {
 // HandleMessage processes a user message and streams Claude's response
 // It returns a channel that emits response chunks
 func (ch *ChatHandler) HandleMessage(ctx context.Context, request MessageRequest) (<-chan MessageResponse, error) {
-	log.Printf("HandleMessage: received message (length: %d), sessionID: %s", len(request.Content), request.SessionID)
+	// Default to haiku if no model specified
+	model := request.Model
+	if model == "" {
+		model = "haiku"
+	}
+
+	log.Printf("HandleMessage: received message (length: %d), sessionID: %s, model: %s", len(request.Content), request.SessionID, model)
 
 	// Validate input
 	if strings.TrimSpace(request.Content) == "" {
 		return nil, fmt.Errorf("message content cannot be empty")
 	}
 
-	// Get or create session
-	sessionID, isNew, err := ch.sessionManager.GetOrCreateSession(request.SessionID)
+	// Get or create session with the specified model
+	sessionID, isNew, err := ch.sessionManager.GetOrCreateSessionWithModel(request.SessionID, model)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get or create session: %w", err)
 	}
 
 	if isNew {
-		log.Printf("Created new session: %s", sessionID)
+		log.Printf("Created new session: %s with model: %s", sessionID, model)
 	} else {
 		log.Printf("Using existing session: %s", sessionID)
+		// Update the model if the session already exists (user might have changed it)
+		if err := ch.sessionManager.UpdateSessionModel(sessionID, model); err != nil {
+			log.Printf("Warning: failed to update session model: %v", err)
+		}
 	}
 
 	// Save user message to database
@@ -80,7 +91,7 @@ func (ch *ChatHandler) HandleMessage(ctx context.Context, request MessageRequest
 			log.Printf("Using stored Claude session ID: %s", claudeSessionID)
 		}
 	}
-	claudeResponseChan, err := ch.claudeExecutor.ExecuteClaude(ctx, request.Content, claudeSessionID)
+	claudeResponseChan, err := ch.claudeExecutor.ExecuteClaude(ctx, request.Content, claudeSessionID, model)
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute claude: %w", err)
 	}

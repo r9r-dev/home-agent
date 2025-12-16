@@ -24,16 +24,21 @@ func NewSessionManager(db *models.DB) *SessionManager {
 	}
 }
 
-// CreateSession creates a new session with a generated UUID
+// CreateSession creates a new session with a generated UUID and default model (haiku)
 func (sm *SessionManager) CreateSession() (string, error) {
+	return sm.CreateSessionWithModel("haiku")
+}
+
+// CreateSessionWithModel creates a new session with a generated UUID and specified model
+func (sm *SessionManager) CreateSessionWithModel(model string) (string, error) {
 	sessionID := uuid.New().String()
 
-	session, err := sm.db.CreateSession(sessionID)
+	session, err := sm.db.CreateSessionWithModel(sessionID, model)
 	if err != nil {
 		return "", fmt.Errorf("failed to create session in database: %w", err)
 	}
 
-	log.Printf("SessionManager: Created new session %s", session.SessionID)
+	log.Printf("SessionManager: Created new session %s with model %s", session.SessionID, model)
 	return session.SessionID, nil
 }
 
@@ -123,9 +128,14 @@ func (sm *SessionManager) UnmapWebSession(webSessionID string) {
 
 // GetOrCreateSession gets an existing session or creates a new one if the ID is empty
 func (sm *SessionManager) GetOrCreateSession(sessionID string) (string, bool, error) {
+	return sm.GetOrCreateSessionWithModel(sessionID, "haiku")
+}
+
+// GetOrCreateSessionWithModel gets an existing session or creates a new one with specified model
+func (sm *SessionManager) GetOrCreateSessionWithModel(sessionID string, model string) (string, bool, error) {
 	// If no session ID provided, create a new one
 	if sessionID == "" {
-		newSessionID, err := sm.CreateSession()
+		newSessionID, err := sm.CreateSessionWithModel(model)
 		if err != nil {
 			return "", false, fmt.Errorf("failed to create new session: %w", err)
 		}
@@ -170,6 +180,14 @@ func (sm *SessionManager) DeleteSession(sessionID string) error {
 func (sm *SessionManager) UpdateClaudeSessionID(sessionID, claudeSessionID string) error {
 	if err := sm.db.UpdateClaudeSessionID(sessionID, claudeSessionID); err != nil {
 		return fmt.Errorf("failed to update claude session id: %w", err)
+	}
+	return nil
+}
+
+// UpdateSessionModel updates the model of a session
+func (sm *SessionManager) UpdateSessionModel(sessionID, model string) error {
+	if err := sm.db.UpdateSessionModel(sessionID, model); err != nil {
+		return fmt.Errorf("failed to update session model: %w", err)
 	}
 	return nil
 }

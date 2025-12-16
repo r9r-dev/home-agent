@@ -105,7 +105,7 @@
 
 <style>
   .input-box {
-    padding: 1.5rem 2rem;
+    padding: 1.5rem 2rem 0rem 2rem;
     background: var(--color-bg-primary);
     border-top: 1px solid var(--color-border);
   }

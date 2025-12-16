@@ -12,9 +12,12 @@ export interface Message {
   timestamp: Date;
 }
 
+export type ClaudeModel = 'haiku' | 'sonnet' | 'opus';
+
 export interface ChatState {
   messages: Message[];
   currentSessionId: string | null;
+  selectedModel: ClaudeModel;
   isConnected: boolean;
   isTyping: boolean;
   error: string | null;
@@ -23,6 +26,7 @@ export interface ChatState {
 const initialState: ChatState = {
   messages: [],
   currentSessionId: null,
+  selectedModel: 'haiku',
   isConnected: false,
   isTyping: false,
   error: null,
@@ -136,24 +140,36 @@ function createChatStore() {
     },
 
     /**
-     * Clear all messages
+     * Clear all messages and reset model to default
      */
     clearMessages: () => {
       update((state) => ({
         ...state,
         messages: [],
         currentSessionId: null,
+        selectedModel: 'haiku',
       }));
     },
 
     /**
      * Load messages from an existing session
      */
-    loadMessages: (sessionId: string, loadedMessages: Message[]) => {
+    loadMessages: (sessionId: string, loadedMessages: Message[], model?: ClaudeModel) => {
       update((state) => ({
         ...state,
         messages: loadedMessages,
         currentSessionId: sessionId,
+        selectedModel: model || state.selectedModel,
+      }));
+    },
+
+    /**
+     * Set selected Claude model
+     */
+    setModel: (model: ClaudeModel) => {
+      update((state) => ({
+        ...state,
+        selectedModel: model,
       }));
     },
 
@@ -214,3 +230,4 @@ export const messages = derived(chatStore, ($store) => $store.messages);
 export const isConnected = derived(chatStore, ($store) => $store.isConnected);
 export const isTyping = derived(chatStore, ($store) => $store.isTyping);
 export const error = derived(chatStore, ($store) => $store.error);
+export const selectedModel = derived(chatStore, ($store) => $store.selectedModel);

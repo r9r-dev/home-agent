@@ -28,6 +28,7 @@ type ClientMessage struct {
 	Type      string `json:"type"`                // "message", "ping", "history"
 	Content   string `json:"content,omitempty"`   // Message content
 	SessionID string `json:"sessionId,omitempty"` // Optional session ID
+	Model     string `json:"model,omitempty"`     // Claude model: haiku, sonnet, opus
 }
 
 // ServerMessage represents a message sent to the WebSocket client
@@ -139,12 +140,13 @@ func (wsh *WebSocketHandler) HandleWebSocket(c *websocket.Conn) {
 
 // handleChatMessage processes a chat message from the client
 func (wsh *WebSocketHandler) handleChatMessage(c *websocket.Conn, clientMsg ClientMessage, clientAddr string) {
-	log.Printf("Processing chat message from %s (sessionID: %s)", clientAddr, clientMsg.SessionID)
+	log.Printf("Processing chat message from %s (sessionID: %s, model: %s)", clientAddr, clientMsg.SessionID, clientMsg.Model)
 
 	// Create message request
 	request := MessageRequest{
 		Content:   clientMsg.Content,
 		SessionID: clientMsg.SessionID,
+		Model:     clientMsg.Model,
 	}
 
 	// Create context with timeout

@@ -15,6 +15,7 @@ type Session struct {
 	SessionID       string    `json:"session_id"`        // Internal session UUID
 	ClaudeSessionID string    `json:"claude_session_id"` // Claude Code CLI session ID for --resume
 	Title           string    `json:"title"`             // Auto-generated title from first message
+	Model           string    `json:"model"`             // Claude model: haiku, sonnet, opus
 	CreatedAt       time.Time `json:"created_at"`
 	LastActivity    time.Time `json:"last_activity"`
 }
@@ -85,6 +86,11 @@ func (db *DB) createTables() error {
 	ALTER TABLE sessions ADD COLUMN claude_session_id TEXT DEFAULT '';
 	`
 
+	// Migration: add model column if it doesn't exist (default to haiku)
+	alterTableModel := `
+	ALTER TABLE sessions ADD COLUMN model TEXT DEFAULT 'haiku';
+	`
+
 	messagesTable := `
 	CREATE TABLE IF NOT EXISTS messages (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -110,20 +116,26 @@ func (db *DB) createTables() error {
 	// Run migrations (ignore errors if columns already exist)
 	db.conn.Exec(alterTableTitle)
 	db.conn.Exec(alterTableClaudeSession)
+	db.conn.Exec(alterTableModel)
 
 	return nil
 }
 
-// CreateSession creates a new session in the database
+// CreateSession creates a new session in the database with default model (haiku)
 func (db *DB) CreateSession(sessionID string) (*Session, error) {
+	return db.CreateSessionWithModel(sessionID, "haiku")
+}
+
+// CreateSessionWithModel creates a new session in the database with specified model
+func (db *DB) CreateSessionWithModel(sessionID, model string) (*Session, error) {
 	now := time.Now()
 
 	query := `
-	INSERT INTO sessions (session_id, claude_session_id, title, created_at, last_activity)
-	VALUES (?, '', '', ?, ?)
+	INSERT INTO sessions (session_id, claude_session_id, title, model, created_at, last_activity)
+	VALUES (?, '', '', ?, ?, ?)
 	`
 
-	result, err := db.conn.Exec(query, sessionID, now, now)
+	result, err := db.conn.Exec(query, sessionID, model, now, now)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create session: %w", err)
 	}
@@ -133,13 +145,14 @@ func (db *DB) CreateSession(sessionID string) (*Session, error) {
 		return nil, fmt.Errorf("failed to get last insert id: %w", err)
 	}
 
-	log.Printf("Created new session: %s (ID: %d)", sessionID, id)
+	log.Printf("Created new session: %s (ID: %d, model: %s)", sessionID, id, model)
 
 	return &Session{
 		ID:              int(id),
 		SessionID:       sessionID,
 		ClaudeSessionID: "",
 		Title:           "",
+		Model:           model,
 		CreatedAt:       now,
 		LastActivity:    now,
 	}, nil
@@ -148,7 +161,7 @@ func (db *DB) CreateSession(sessionID string) (*Session, error) {
 // GetSession retrieves a session by its session ID
 func (db *DB) GetSession(sessionID string) (*Session, error) {
 	query := `
-	SELECT id, session_id, COALESCE(claude_session_id, ''), title, created_at, last_activity
+	SELECT id, session_id, COALESCE(claude_session_id, ''), title, COALESCE(model, 'haiku'), created_at, last_activity
 	FROM sessions
 	WHERE session_id = ?
 	`
@@ -159,6 +172,7 @@ func (db *DB) GetSession(sessionID string) (*Session, error) {
 		&session.SessionID,
 		&session.ClaudeSessionID,
 		&session.Title,
+		&session.Model,
 		&session.CreatedAt,
 		&session.LastActivity,
 	)
@@ -270,7 +284,7 @@ func (db *DB) GetMessages(sessionID string) ([]*Message, error) {
 // ListSessions retrieves all sessions ordered by last activity (most recent first)
 func (db *DB) ListSessions() ([]*Session, error) {
 	query := `
-	SELECT id, session_id, COALESCE(claude_session_id, ''), title, created_at, last_activity
+	SELECT id, session_id, COALESCE(claude_session_id, ''), title, COALESCE(model, 'haiku'), created_at, last_activity
 	FROM sessions
 	ORDER BY last_activity DESC
 	`
@@ -289,6 +303,7 @@ func (db *DB) ListSessions() ([]*Session, error) {
 			&session.SessionID,
 			&session.ClaudeSessionID,
 			&session.Title,
+			&session.Model,
 			&session.CreatedAt,
 			&session.LastActivity,
 		)
@@ -327,6 +342,32 @@ func (db *DB) UpdateSessionTitle(sessionID, title string) error {
 		return fmt.Errorf("session not found: %s", sessionID)
 	}
 
+	return nil
+}
+
+// UpdateSessionModel updates the model of a session
+func (db *DB) UpdateSessionModel(sessionID, model string) error {
+	query := `
+	UPDATE sessions
+	SET model = ?
+	WHERE session_id = ?
+	`
+
+	result, err := db.conn.Exec(query, model, sessionID)
+	if err != nil {
+		return fmt.Errorf("failed to update session model: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return fmt.Errorf("session not found: %s", sessionID)
+	}
+
+	log.Printf("Updated model for session %s: %s", sessionID, model)
 	return nil
 }
 

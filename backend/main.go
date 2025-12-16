@@ -212,6 +212,30 @@ func main() {
 		return c.JSON(fiber.Map{"deleted": sessionID})
 	})
 
+	// Update session model
+	app.Patch("/api/sessions/:id/model", func(c *fiber.Ctx) error {
+		sessionID := c.Params("id")
+
+		var body struct {
+			Model string `json:"model"`
+		}
+		if err := c.BodyParser(&body); err != nil {
+			return c.Status(400).JSON(fiber.Map{"error": "Invalid request body"})
+		}
+
+		// Validate model
+		validModels := map[string]bool{"haiku": true, "sonnet": true, "opus": true}
+		if !validModels[body.Model] {
+			return c.Status(400).JSON(fiber.Map{"error": "Invalid model. Must be one of: haiku, sonnet, opus"})
+		}
+
+		if err := sessionManager.UpdateSessionModel(sessionID, body.Model); err != nil {
+			return c.Status(500).JSON(fiber.Map{"error": err.Error()})
+		}
+
+		return c.JSON(fiber.Map{"session_id": sessionID, "model": body.Model})
+	})
+
 	// Register WebSocket routes
 	wsHandler.RegisterRoutes(app)
 

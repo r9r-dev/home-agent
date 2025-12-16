@@ -138,13 +138,13 @@ export class WebSocketService {
   /**
    * Send a message to the server
    */
-  sendMessage(content: string, sessionId?: string): void {
+  sendMessage(content: string, sessionId?: string, model?: string): void {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       console.error('[WebSocket] Cannot send message: not connected');
       throw new Error('WebSocket is not connected');
     }
 
-    const message: { type: string; content: string; sessionId?: string } = {
+    const message: { type: string; content: string; sessionId?: string; model?: string } = {
       type: 'message',
       content,
     };
@@ -153,8 +153,12 @@ export class WebSocketService {
       message.sessionId = sessionId;
     }
 
+    if (model) {
+      message.model = model;
+    }
+
     this.ws.send(JSON.stringify(message));
-    console.log('[WebSocket] Message sent (sessionId:', sessionId || 'none', ')');
+    console.log('[WebSocket] Message sent (sessionId:', sessionId || 'none', ', model:', model || 'default', ')');
   }
 
   /**

@@ -1,11 +1,12 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
-  import { chatStore } from '../stores/chatStore';
+  import { chatStore, type ClaudeModel } from '../stores/chatStore';
   import { websocketService } from '../services/websocket';
-  import { fetchMessages, type Message as ApiMessage } from '../services/api';
+  import { fetchMessages, fetchSession, type Message as ApiMessage } from '../services/api';
   import MessageList from './MessageList.svelte';
   import InputBox from './InputBox.svelte';
   import Sidebar from './Sidebar.svelte';
+  import ModelSelector from './ModelSelector.svelte';
 
   // App version (injected by Vite from package.json)
   declare const __APP_VERSION__: string;
@@ -110,8 +111,8 @@
       // Add user message to chat
       chatStore.addMessage('user', content);
 
-      // Send to server with session ID for continuity
-      websocketService.sendMessage(content, state.currentSessionId || undefined);
+      // Send to server with session ID and model for continuity
+      websocketService.sendMessage(content, state.currentSessionId || undefined, state.selectedModel);
 
       // Clear any previous errors
       chatStore.setError(null);
@@ -131,8 +132,11 @@
    */
   async function handleSelectSession(sessionId: string) {
     try {
-      // Fetch messages for the session
-      const apiMessages = await fetchMessages(sessionId);
+      // Fetch session and messages in parallel
+      const [session, apiMessages] = await Promise.all([
+        fetchSession(sessionId),
+        fetchMessages(sessionId),
+      ]);
 
       // Convert API messages to store format
       const messages = apiMessages.map((msg: ApiMessage) => ({
@@ -142,8 +146,8 @@
         timestamp: new Date(msg.created_at),
       }));
 
-      // Load messages into store
-      chatStore.loadMessages(sessionId, messages);
+      // Load messages into store with the session's model
+      chatStore.loadMessages(sessionId, messages, session.model as ClaudeModel);
       chatStore.setError(null);
     } catch (error) {
       console.error('[ChatWindow] Failed to load session:', error);
@@ -229,6 +233,7 @@
         <nav class="header-nav">
           <a href="#" class="nav-link">Machines</a>
           <a href="#" class="nav-link">Containers</a>
+          <ModelSelector />
           <div class="status-badge">
             <span class="status-dot" style="background-color: {connectionStatus.color}"></span>
             <span class="status-label">{connectionStatus.text}</span>

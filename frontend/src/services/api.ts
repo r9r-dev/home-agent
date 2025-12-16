@@ -2,10 +2,13 @@
  * API Service for REST endpoints
  */
 
+export type ClaudeModel = 'haiku' | 'sonnet' | 'opus';
+
 export interface Session {
   id: number;
   session_id: string;
   title: string;
+  model: ClaudeModel;
   created_at: string;
   last_activity: string;
 }
@@ -45,6 +48,17 @@ export async function fetchMessages(sessionId: string): Promise<Message[]> {
 }
 
 /**
+ * Fetch a single session by ID
+ */
+export async function fetchSession(sessionId: string): Promise<Session> {
+  const response = await fetch(`${API_BASE}/sessions/${sessionId}`);
+  if (!response.ok) {
+    throw new Error('Failed to fetch session');
+  }
+  return response.json();
+}
+
+/**
  * Delete a session
  */
 export async function deleteSession(sessionId: string): Promise<void> {
@@ -53,5 +67,21 @@ export async function deleteSession(sessionId: string): Promise<void> {
   });
   if (!response.ok) {
     throw new Error('Failed to delete session');
+  }
+}
+
+/**
+ * Update session model
+ */
+export async function updateSessionModel(sessionId: string, model: ClaudeModel): Promise<void> {
+  const response = await fetch(`${API_BASE}/sessions/${sessionId}/model`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ model }),
+  });
+  if (!response.ok) {
+    throw new Error('Failed to update session model');
   }
 }
