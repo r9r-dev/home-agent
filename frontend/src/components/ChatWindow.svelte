@@ -217,7 +217,7 @@
     onNewConversation={handleNewConversation}
   />
 
-  <div class="flex flex-col flex-1 min-w-0 bg-background">
+  <div class="flex flex-col flex-1 min-w-0 min-h-0 bg-background">
     <header class="bg-background border-b border-border shrink-0">
       <div class="flex justify-between items-center px-8 py-4 max-w-[1400px] mx-auto w-full">
         <div class="text-xl font-medium tracking-tight">

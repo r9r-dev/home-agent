@@ -121,3 +121,17 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Always visible scrollbar for message area */
+[data-slot="scroll-area-scrollbar"] {
+  opacity: 1 !important;
+}
+
+[data-slot="scroll-area-thumb"] {
+  background-color: hsl(var(--muted-foreground) / 0.3) !important;
+  transition: background-color 0.2s ease;
+}
+
+[data-slot="scroll-area-thumb"]:hover {
+  background-color: hsl(var(--muted-foreground) / 0.5) !important;
+}

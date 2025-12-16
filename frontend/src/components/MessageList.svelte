@@ -25,7 +25,15 @@
    * Normalize markdown content to ensure proper parsing
    */
   function normalizeMarkdown(content: string): string {
-    return content.replace(/([^\n])(\n?)(#{1,6}\s)/g, '$1\n\n$3');
+    let normalized = content;
+
+    // Ensure headers have blank lines before them
+    normalized = normalized.replace(/([^\n])(\n?)(#{1,6}\s)/g, '$1\n\n$3');
+
+    // Ensure proper paragraph breaks (double newlines become proper breaks)
+    normalized = normalized.replace(/\n{2,}/g, '\n\n');
+
+    return normalized;
   }
 
   /**
@@ -131,7 +139,7 @@
   });
 </script>
 
-<ScrollArea class="flex-1" bind:viewportRef={scrollAreaViewport}>
+<ScrollArea class="flex-1 min-h-0" bind:viewportRef={scrollAreaViewport}>
   <div
     class="flex flex-col gap-6 p-8 max-w-[900px] mx-auto w-full"
     role="log"
@@ -187,6 +195,11 @@
 
 <style>
   /* Markdown styles - keeping these as they style dynamically rendered HTML */
+  .markdown-body {
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+  }
+
   .markdown-body :global(pre) {
     background: hsl(var(--muted));
     border: 1px solid hsl(var(--border));
@@ -194,6 +207,7 @@
     padding: 1rem;
     overflow-x: auto;
     margin: 1rem 0;
+    white-space: pre-wrap;
   }
 
   .markdown-body :global(code) {
@@ -212,6 +226,7 @@
 
   .markdown-body :global(p) {
     margin: 0.75rem 0;
+    white-space: pre-wrap;
   }
 
   .markdown-body :global(p:first-child) {
@@ -220,6 +235,13 @@
 
   .markdown-body :global(p:last-child) {
     margin-bottom: 0;
+  }
+
+  /* Ensure line breaks are visible */
+  .markdown-body :global(br) {
+    display: block;
+    content: "";
+    margin: 0.25rem 0;
   }
 
   .markdown-body :global(ul),
@@ -232,6 +254,10 @@
     margin: 0.375rem 0;
   }
 
+  .markdown-body :global(li p) {
+    margin: 0.25rem 0;
+  }
+
   .markdown-body :global(h1),
   .markdown-body :global(h2),
   .markdown-body :global(h3),
@@ -239,6 +265,13 @@
     margin: 1.5rem 0 0.75rem 0;
     font-weight: 500;
     color: hsl(var(--foreground));
+  }
+
+  .markdown-body :global(h1:first-child),
+  .markdown-body :global(h2:first-child),
+  .markdown-body :global(h3:first-child),
+  .markdown-body :global(h4:first-child) {
+    margin-top: 0;
   }
 
   .markdown-body :global(h1) {
@@ -268,6 +301,13 @@
 
   .markdown-body :global(a:hover) {
     color: hsl(var(--primary) / 0.8);
+  }
+
+  /* Horizontal rules */
+  .markdown-body :global(hr) {
+    border: none;
+    border-top: 1px solid hsl(var(--border));
+    margin: 1.5rem 0;
   }
 
   /* Responsive */
