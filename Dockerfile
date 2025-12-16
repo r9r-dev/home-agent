@@ -21,7 +21,7 @@ COPY frontend/ ./
 RUN APP_VERSION=${APP_VERSION} npm run build
 
 # Stage 1b: Build backend (runs in parallel with frontend)
-FROM golang:1.21-alpine AS backend-builder
+FROM golang:1.24-alpine AS backend-builder
 
 WORKDIR /app
 
