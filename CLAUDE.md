@@ -72,6 +72,7 @@ UI Enhancements (v0.10.0+):
 - Connection badge: black background with white text, green dot when connected
 - Conversation titles generated in French via modified backend prompt
 - Cal Sans font for conversation titles (local woff2 in `/public/fonts/`)
+- v0.10.1: Lighter Cal Sans font weight (.font-cal class), improved scrollbar visibility, Dialog component for delete confirmation
 
 Key directories:
 - `src/components/` - App components (ChatWindow, Sidebar, MessageList, etc.)
