@@ -18,11 +18,21 @@
   });
 
   /**
+   * Normalize markdown content to ensure proper parsing
+   */
+  function normalizeMarkdown(content: string): string {
+    // Ensure headings have a newline before them (required for markdown parsing)
+    // Match # not preceded by newline or start, add newline before
+    return content.replace(/([^\n])(\n?)(#{1,6}\s)/g, '$1\n\n$3');
+  }
+
+  /**
    * Render markdown to HTML
    */
   function renderMarkdown(content: string): string {
     try {
-      return marked.parse(content) as string;
+      const normalized = normalizeMarkdown(content);
+      return marked.parse(normalized) as string;
     } catch (error) {
       console.error('Markdown parse error:', error);
       return content;
@@ -235,6 +245,10 @@
     font-size: 0.875rem;
     line-height: 1.7;
     font-family: var(--font-family-mono);
+  }
+
+  /* Preserve line breaks for user messages (plain text) */
+  .message.user .message-text {
     white-space: pre-wrap;
   }
 
