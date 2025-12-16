@@ -137,25 +137,4 @@
   font-weight: 400;
 }
 
-/* Custom scrollbar styles (overrides shadcn-svelte defaults) */
-[data-slot="scroll-area-scrollbar"] {
-  padding: 2px !important;
-  width: 12px !important;
-  background-color: hsl(var(--muted) / 0.5) !important;
-  border: none !important;
-}
-
-[data-slot="scroll-area-scrollbar"][data-orientation="horizontal"] {
-  width: auto !important;
-  height: 12px !important;
-}
-
-[data-slot="scroll-area-thumb"] {
-  background-color: hsl(var(--muted-foreground) / 0.4) !important;
-  transition: background-color 0.2s ease !important;
-}
-
-[data-slot="scroll-area-thumb"]:hover {
-  background-color: hsl(var(--muted-foreground) / 0.6) !important;
-}
 

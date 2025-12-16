@@ -74,6 +74,12 @@ UI Enhancements (v0.10.0+):
 - Cal Sans font for conversation titles (local woff2 in `/public/fonts/`)
 - v0.10.1: Lighter Cal Sans font weight (.font-cal class), improved scrollbar visibility, Dialog component for delete confirmation
 
+**Custom Component Modifications (re-apply after shadcn-svelte updates):**
+- `scroll-area.svelte`: Add `type = "always"` prop (default) for always-visible scrollbar
+- `scroll-area-scrollbar.svelte`: Custom classes for visible scrollbar:
+  - Scrollbar: `bg-muted/50`, `w-3` (vertical), `h-3` (horizontal), `p-0.5`
+  - Thumb: `bg-muted-foreground/40 hover:bg-muted-foreground/60`
+
 Key directories:
 - `src/components/` - App components (ChatWindow, Sidebar, MessageList, etc.)
 - `src/lib/components/ui/` - shadcn-svelte components (button, select, badge, etc.)
