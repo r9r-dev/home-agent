@@ -59,6 +59,12 @@ git tag v0.x.x && git push origin v0.x.x
 - **shadcn-svelte** UI components (bits-ui primitives)
 - **Lucide icons** (`@lucide/svelte`)
 
+Layout & Styling Notes (v0.9.1+):
+- ChatWindow uses flexbox with `min-h-0` on flex children to enable proper vertical scrolling
+- MessageList ScrollArea requires `min-h-0` class for constrained height behavior
+- Always-visible scrollbar styled with theme variables in `app.css` for consistent look
+- Markdown content uses `white-space: pre-wrap` for proper text spacing preservation
+
 Key directories:
 - `src/components/` - App components (ChatWindow, Sidebar, MessageList, etc.)
 - `src/lib/components/ui/` - shadcn-svelte components (button, select, badge, etc.)
