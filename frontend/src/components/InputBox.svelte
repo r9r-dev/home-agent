@@ -1,22 +1,28 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { Textarea } from "$lib/components/ui/textarea";
+  import { Button } from "$lib/components/ui/button";
+  import SendIcon from "@lucide/svelte/icons/send";
 
   // Props
-  export let disabled = false;
-  export let onSend: (message: string) => void;
+  interface Props {
+    disabled?: boolean;
+    onSend: (message: string) => void;
+  }
+
+  let { disabled = false, onSend }: Props = $props();
 
   // Local state
-  let textarea: HTMLTextAreaElement;
-  let message = '';
+  let textareaRef = $state<HTMLTextAreaElement | null>(null);
+  let message = $state('');
 
   /**
    * Auto-resize textarea based on content
    */
   function autoResize() {
-    if (!textarea) return;
-
-    textarea.style.height = 'auto';
-    textarea.style.height = Math.min(textarea.scrollHeight, 200) + 'px';
+    if (!textareaRef) return;
+    textareaRef.style.height = 'auto';
+    textareaRef.style.height = Math.min(textareaRef.scrollHeight, 200) + 'px';
   }
 
   /**
@@ -36,8 +42,8 @@
     message = '';
 
     // Reset textarea height
-    if (textarea) {
-      textarea.style.height = 'auto';
+    if (textareaRef) {
+      textareaRef.style.height = 'auto';
     }
   }
 
@@ -56,153 +62,44 @@
    * Focus the textarea (exported for parent components)
    */
   export function focus() {
-    if (textarea) {
-      textarea.focus();
+    if (textareaRef) {
+      textareaRef.focus();
     }
   }
 
   onMount(() => {
     autoResize();
-    // Auto-focus on mount
     focus();
   });
 </script>
 
-<div class="input-box">
-  <div class="input-container">
-    <textarea
-      bind:this={textarea}
+<div class="p-6 pb-0 bg-background border-t border-border">
+  <div class="flex gap-3 items-center bg-muted border border-border rounded-lg px-4 py-3 max-w-[900px] mx-auto min-h-12 transition-colors focus-within:border-ring">
+    <Textarea
+      bind:ref={textareaRef}
       bind:value={message}
-      on:input={handleInput}
-      on:keydown={handleKeyDown}
+      oninput={handleInput}
+      onkeydown={handleKeyDown}
       placeholder="Ecrivez votre message..."
-      rows="1"
+      rows={1}
       {disabled}
       aria-label="Message input"
+      class="flex-1 bg-transparent border-none shadow-none p-0 min-h-5 max-h-[200px] resize-none focus-visible:ring-0 focus-visible:border-none text-sm font-mono"
     />
-    <button
-      class="send-button"
-      on:click={handleSend}
+    <Button
+      variant="outline"
+      size="icon-sm"
+      onclick={handleSend}
       disabled={disabled || !message.trim()}
       aria-label="Send message"
       type="button"
     >
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        viewBox="0 0 24 24"
-        fill="currentColor"
-        width="20"
-        height="20"
-      >
-        <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
-      </svg>
-    </button>
+      <SendIcon class="size-4" />
+    </Button>
   </div>
   {#if disabled}
-    <div class="hint">En attente de reponse...</div>
+    <p class="mt-3 text-xs text-muted-foreground text-center font-mono">
+      En attente de réponse...
+    </p>
   {/if}
 </div>
-
-<style>
-  .input-box {
-    padding: 1.5rem 2rem 0rem 2rem;
-    background: var(--color-bg-primary);
-    border-top: 1px solid var(--color-border);
-  }
-
-  .input-container {
-    display: flex;
-    gap: 0.75rem;
-    align-items: center;
-    background: var(--color-bg-tertiary);
-    border: 1px solid var(--color-border);
-    border-radius: 8px;
-    padding: 0.75rem 1rem;
-    max-width: 900px;
-    margin: 0 auto;
-    min-height: 48px;
-    transition: border-color 0.15s ease;
-  }
-
-  .input-container:focus-within {
-    border-color: var(--color-border-light);
-  }
-
-  textarea {
-    flex: 1;
-    background: transparent;
-    border: none;
-    color: var(--color-text-primary);
-    font-family: var(--font-family-mono);
-    font-size: 0.875rem;
-    line-height: 1.4;
-    resize: none;
-    outline: none;
-    max-height: 200px;
-    overflow-y: auto;
-    padding: 0;
-    margin: 0;
-    min-height: 20px;
-  }
-
-  textarea::placeholder {
-    color: var(--color-text-tertiary);
-  }
-
-  textarea:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  .send-button {
-    flex-shrink: 0;
-    width: 32px;
-    height: 32px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: transparent;
-    border: 1px solid var(--color-border);
-    border-radius: 6px;
-    color: var(--color-text-secondary);
-    cursor: pointer;
-    transition: all 0.15s ease;
-  }
-
-  .send-button:hover:not(:disabled) {
-    border-color: var(--color-text-secondary);
-    color: var(--color-text-primary);
-  }
-
-  .send-button:disabled {
-    opacity: 0.3;
-    cursor: not-allowed;
-  }
-
-  .send-button svg {
-    width: 16px;
-    height: 16px;
-  }
-
-  .hint {
-    margin-top: 0.75rem;
-    font-size: 0.75rem;
-    color: var(--color-text-tertiary);
-    text-align: center;
-    font-family: var(--font-family-mono);
-  }
-
-  /* Scrollbar styles */
-  textarea::-webkit-scrollbar {
-    width: 4px;
-  }
-
-  textarea::-webkit-scrollbar-track {
-    background: transparent;
-  }
-
-  textarea::-webkit-scrollbar-thumb {
-    background: var(--color-border);
-    border-radius: 2px;
-  }
-</style>

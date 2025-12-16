@@ -1,5 +1,7 @@
 <script lang="ts">
-  import { chatStore, selectedModel, type ClaudeModel } from '../stores/chatStore';
+  import * as Select from "$lib/components/ui/select";
+  import { chatStore, type ClaudeModel } from '../stores/chatStore';
+  import { get } from 'svelte/store';
 
   const models: { value: ClaudeModel; label: string }[] = [
     { value: 'haiku', label: 'Haiku 4.5' },
@@ -7,52 +9,31 @@
     { value: 'opus', label: 'Opus 4.5' },
   ];
 
-  function handleChange(event: Event) {
-    const target = event.target as HTMLSelectElement;
-    chatStore.setModel(target.value as ClaudeModel);
+  let currentModel = $state<ClaudeModel>(get(chatStore).selectedModel);
+
+  // Sync with store
+  chatStore.subscribe((state) => {
+    currentModel = state.selectedModel;
+  });
+
+  function handleValueChange(value: string | undefined) {
+    if (value) {
+      chatStore.setModel(value as ClaudeModel);
+    }
+  }
+
+  function getLabel(value: ClaudeModel): string {
+    return models.find(m => m.value === value)?.label ?? value;
   }
 </script>
 
-<div class="model-selector">
-  <select value={$selectedModel} on:change={handleChange}>
+<Select.Root type="single" value={currentModel} onValueChange={handleValueChange}>
+  <Select.Trigger size="sm" class="w-[120px] text-xs">
+    {getLabel(currentModel)}
+  </Select.Trigger>
+  <Select.Content>
     {#each models as model}
-      <option value={model.value}>{model.label}</option>
+      <Select.Item value={model.value}>{model.label}</Select.Item>
     {/each}
-  </select>
-</div>
-
-<style>
-  .model-selector {
-    display: flex;
-    align-items: center;
-  }
-
-  select {
-    background: var(--color-bg-tertiary);
-    color: var(--color-text-secondary);
-    border: 1px solid var(--color-border);
-    border-radius: 4px;
-    padding: 0.375rem 0.5rem;
-    font-size: 0.75rem;
-    font-family: var(--font-family-sans);
-    cursor: pointer;
-    outline: none;
-    transition: border-color var(--transition-fast), color var(--transition-fast);
-  }
-
-  select:hover {
-    border-color: var(--color-border-hover, var(--color-border));
-    color: var(--color-text-primary);
-  }
-
-  select:focus {
-    border-color: var(--color-primary, #3b82f6);
-  }
-
-  @media (max-width: 768px) {
-    select {
-      padding: 0.25rem 0.375rem;
-      font-size: 0.625rem;
-    }
-  }
-</style>
+  </Select.Content>
+</Select.Root>

@@ -1,3 +1,7 @@
+<script lang="ts" module>
+  declare const __APP_VERSION__: string;
+</script>
+
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { chatStore, type ClaudeModel } from '../stores/chatStore';
@@ -7,17 +11,19 @@
   import InputBox from './InputBox.svelte';
   import Sidebar from './Sidebar.svelte';
   import ModelSelector from './ModelSelector.svelte';
+  import { Badge } from "$lib/components/ui/badge";
+  import { Button } from "$lib/components/ui/button";
+  import * as Alert from "$lib/components/ui/alert";
+  import CircleAlertIcon from "@lucide/svelte/icons/circle-alert";
 
   // App version (injected by Vite from package.json)
-  declare const __APP_VERSION__: string;
   const APP_VERSION = __APP_VERSION__;
 
   // Sidebar reference for refreshing
   let sidebar: { refresh: () => void };
 
   // Subscribe to store
-  let state = $chatStore;
-  $: state = $chatStore;
+  let state = $derived($chatStore);
 
   // Cleanup functions
   let unsubscribeMessage: (() => void) | null = null;
@@ -33,13 +39,11 @@
 
     switch (data.type) {
       case 'chunk':
-        // Streaming response chunk
         chatStore.setTyping(true);
         chatStore.appendToLastMessage(data.content);
         break;
 
       case 'done':
-        // Response complete
         chatStore.setTyping(false);
         if (data.sessionId) {
           chatStore.setSessionId(data.sessionId);
@@ -47,14 +51,12 @@
         break;
 
       case 'error':
-        // Error from backend
         chatStore.setTyping(false);
         chatStore.setError(data.message || data.error || 'An error occurred');
         break;
 
       case 'session':
       case 'session_id':
-        // Session information
         if (data.sessionId) {
           chatStore.setSessionId(data.sessionId);
         }
@@ -83,7 +85,6 @@
     chatStore.setTyping(false);
 
     if (event.code !== 1000) {
-      // Not a normal closure
       chatStore.setError('Connection lost. Attempting to reconnect...');
     }
   }
@@ -108,13 +109,8 @@
     }
 
     try {
-      // Add user message to chat
       chatStore.addMessage('user', content);
-
-      // Send to server with session ID and model for continuity
       websocketService.sendMessage(content, state.currentSessionId || undefined, state.selectedModel);
-
-      // Clear any previous errors
       chatStore.setError(null);
     } catch (error) {
       console.error('[ChatWindow] Failed to send message:', error);
@@ -123,22 +119,22 @@
   }
 
   // Re-focus input when response is complete
-  $: if (!$chatStore.isTyping && inputBox) {
-    inputBox.focus();
-  }
+  $effect(() => {
+    if (!$chatStore.isTyping && inputBox) {
+      inputBox.focus();
+    }
+  });
 
   /**
    * Handle selecting a session from the sidebar
    */
   async function handleSelectSession(sessionId: string) {
     try {
-      // Fetch session and messages in parallel
       const [session, apiMessages] = await Promise.all([
         fetchSession(sessionId),
         fetchMessages(sessionId),
       ]);
 
-      // Convert API messages to store format
       const messages = apiMessages.map((msg: ApiMessage) => ({
         id: String(msg.id),
         role: msg.role,
@@ -146,7 +142,6 @@
         timestamp: new Date(msg.created_at),
       }));
 
-      // Load messages into store with the session's model
       chatStore.loadMessages(sessionId, messages, session.model as ClaudeModel);
       chatStore.setError(null);
     } catch (error) {
@@ -166,22 +161,24 @@
   }
 
   // Refresh sidebar when a message is sent (new session might be created)
-  $: if (!$chatStore.isTyping && $chatStore.messages.length > 0 && sidebar) {
-    sidebar.refresh();
-  }
+  $effect(() => {
+    if (!$chatStore.isTyping && $chatStore.messages.length > 0 && sidebar) {
+      sidebar.refresh();
+    }
+  });
 
   /**
-   * Get connection status display - reactive based on store values
+   * Get connection status display
    */
-  $: connectionStatus = (() => {
+  let connectionStatus = $derived.by(() => {
     if ($chatStore.error) {
-      return { text: 'Erreur', color: 'var(--color-error)' };
+      return { text: 'Erreur', color: 'destructive' as const };
     }
     if ($chatStore.isConnected) {
-      return { text: 'Connecté', color: 'var(--color-success)' };
+      return { text: 'Connecté', color: 'default' as const };
     }
-    return { text: 'Connexion...', color: 'var(--color-warning)' };
-  })();
+    return { text: 'Connexion...', color: 'secondary' as const };
+  });
 
   /**
    * Lifecycle: mount
@@ -189,13 +186,11 @@
   onMount(() => {
     console.log('[ChatWindow] Mounting component');
 
-    // Register WebSocket event handlers
     unsubscribeMessage = websocketService.onMessage(handleWebSocketMessage);
     unsubscribeOpen = websocketService.onOpen(handleWebSocketOpen);
     unsubscribeClose = websocketService.onClose(handleWebSocketClose);
     unsubscribeError = websocketService.onError(handleWebSocketError);
 
-    // Connect to WebSocket
     websocketService.connect();
   });
 
@@ -205,18 +200,16 @@
   onDestroy(() => {
     console.log('[ChatWindow] Unmounting component');
 
-    // Cleanup event handlers
     if (unsubscribeMessage) unsubscribeMessage();
     if (unsubscribeOpen) unsubscribeOpen();
     if (unsubscribeClose) unsubscribeClose();
     if (unsubscribeError) unsubscribeError();
 
-    // Disconnect WebSocket
     websocketService.disconnect();
   });
 </script>
 
-<div class="app-container">
+<div class="flex h-screen overflow-hidden">
   <Sidebar
     bind:this={sidebar}
     currentSessionId={state.currentSessionId}
@@ -224,171 +217,41 @@
     onNewConversation={handleNewConversation}
   />
 
-  <div class="chat-window">
-    <header class="chat-header">
-      <div class="header-content">
-        <div class="header-logo">
-          <span class="logo-home">home</span><span class="logo-agent">agent</span>
+  <div class="flex flex-col flex-1 min-w-0 bg-background">
+    <header class="bg-background border-b border-border shrink-0">
+      <div class="flex justify-between items-center px-8 py-4 max-w-[1400px] mx-auto w-full">
+        <div class="text-xl font-medium tracking-tight">
+          <span class="text-foreground">home</span><span class="text-muted-foreground">agent</span>
         </div>
-        <nav class="header-nav">
-          <a href="#" class="nav-link">Machines</a>
-          <a href="#" class="nav-link">Containers</a>
+        <nav class="flex items-center gap-8">
+          <Button variant="ghost" class="text-muted-foreground hover:text-foreground text-sm">
+            Machines
+          </Button>
+          <Button variant="ghost" class="text-muted-foreground hover:text-foreground text-sm">
+            Containers
+          </Button>
           <ModelSelector />
-          <div class="status-badge">
-            <span class="status-dot" style="background-color: {connectionStatus.color}"></span>
-            <span class="status-label">{connectionStatus.text}</span>
-          </div>
+          <Badge variant={connectionStatus.color === 'destructive' ? 'destructive' : connectionStatus.color === 'default' ? 'default' : 'secondary'} class="gap-2 px-3 py-1.5">
+            <span class="w-1.5 h-1.5 rounded-full {connectionStatus.color === 'destructive' ? 'bg-destructive-foreground' : connectionStatus.color === 'default' ? 'bg-primary-foreground' : 'bg-secondary-foreground'}"></span>
+            {connectionStatus.text}
+          </Badge>
         </nav>
       </div>
     </header>
 
     {#if state.error}
-      <div class="error-banner" role="alert">
-        <span>{state.error}</span>
-      </div>
+      <Alert.Root variant="destructive" class="rounded-none border-x-0 border-t-0">
+        <CircleAlertIcon class="size-4" />
+        <Alert.Description>{state.error}</Alert.Description>
+      </Alert.Root>
     {/if}
 
     <MessageList messages={state.messages} isTyping={state.isTyping} />
 
     <InputBox bind:this={inputBox} onSend={handleSendMessage} disabled={!state.isConnected || state.isTyping} />
 
-    <footer class="app-footer">
-      <span>v{APP_VERSION}</span>
+    <footer class="py-2 px-4 text-center text-[0.625rem] text-muted-foreground font-mono bg-background">
+      v{APP_VERSION}
     </footer>
   </div>
 </div>
-
-<style>
-  .app-container {
-    display: flex;
-    height: 100vh;
-    overflow: hidden;
-  }
-
-  .chat-window {
-    display: flex;
-    flex-direction: column;
-    flex: 1;
-    min-width: 0;
-    background: var(--color-bg-primary);
-  }
-
-  .chat-header {
-    background: var(--color-bg-primary);
-    border-bottom: 1px solid var(--color-border);
-    flex-shrink: 0;
-  }
-
-  .header-content {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 1rem 2rem;
-    max-width: 1400px;
-    margin: 0 auto;
-    width: 100%;
-  }
-
-  .header-logo {
-    font-size: 1.25rem;
-    font-weight: 500;
-    letter-spacing: -0.02em;
-  }
-
-  .logo-home {
-    color: var(--color-text-primary);
-  }
-
-  .logo-agent {
-    color: var(--color-text-secondary);
-  }
-
-  .header-nav {
-    display: flex;
-    align-items: center;
-    gap: 2rem;
-  }
-
-  .nav-link {
-    color: var(--color-text-secondary);
-    font-size: 0.875rem;
-    text-decoration: none;
-    transition: color var(--transition-fast);
-  }
-
-  .nav-link:hover {
-    color: var(--color-text-primary);
-  }
-
-  .status-badge {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0.375rem 0.75rem;
-    background: var(--color-bg-tertiary);
-    border-radius: 4px;
-    border: 1px solid var(--color-border);
-  }
-
-  .status-dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-  }
-
-  .status-label {
-    font-size: 0.75rem;
-    color: var(--color-text-secondary);
-  }
-
-  .error-banner {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 0.75rem 1.5rem;
-    background: rgba(239, 68, 68, 0.1);
-    border-bottom: 1px solid var(--color-error);
-    color: var(--color-error);
-    font-size: 0.875rem;
-  }
-
-  .app-footer {
-    padding: 0.5rem 1rem;
-    text-align: center;
-    font-size: 0.625rem;
-    color: var(--color-text-tertiary);
-    font-family: var(--font-family-mono);
-    background: var(--color-bg-primary);
-  }
-
-  /* Responsive */
-  @media (max-width: 768px) {
-    .app-container :global(.sidebar) {
-      display: none;
-    }
-
-    .header-content {
-      padding: 0.875rem 1rem;
-    }
-
-    .header-logo {
-      font-size: 1rem;
-    }
-
-    .header-nav {
-      gap: 1rem;
-    }
-
-    .nav-link {
-      font-size: 0.75rem;
-    }
-
-    .status-badge {
-      padding: 0.25rem 0.5rem;
-    }
-
-    .status-label {
-      font-size: 0.625rem;
-    }
-  }
-</style>

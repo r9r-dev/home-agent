@@ -1,13 +1,22 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { fetchSessions, deleteSession, type Session } from '../services/api';
+  import { Button } from "$lib/components/ui/button";
+  import { ScrollArea } from "$lib/components/ui/scroll-area";
+  import { Separator } from "$lib/components/ui/separator";
+  import PlusIcon from "@lucide/svelte/icons/plus";
+  import XIcon from "@lucide/svelte/icons/x";
 
-  export let currentSessionId: string | null = null;
-  export let onSelectSession: (sessionId: string) => void;
-  export let onNewConversation: () => void;
+  interface Props {
+    currentSessionId?: string | null;
+    onSelectSession: (sessionId: string) => void;
+    onNewConversation: () => void;
+  }
 
-  let sessions: Session[] = [];
-  let loading = true;
+  let { currentSessionId = null, onSelectSession, onNewConversation }: Props = $props();
+
+  let sessions = $state<Session[]>([]);
+  let loading = $state(true);
 
   async function loadSessions() {
     try {
@@ -61,171 +70,57 @@
   });
 </script>
 
-<aside class="sidebar">
-  <div class="sidebar-header">
-    <button class="new-chat-btn" on:click={onNewConversation} title="Nouvelle conversation">
-      +
-    </button>
+<aside class="w-[260px] bg-sidebar border-r border-sidebar-border flex flex-col h-screen shrink-0">
+  <div class="p-4">
+    <Button
+      variant="outline"
+      size="icon"
+      onclick={onNewConversation}
+      title="Nouvelle conversation"
+      class="bg-sidebar hover:bg-sidebar-accent"
+    >
+      <PlusIcon class="size-5" />
+    </Button>
   </div>
 
-  <div class="sessions-list">
+  <Separator />
+
+  <ScrollArea class="flex-1 px-2 py-2">
     {#if loading}
-      <div class="loading">Chargement...</div>
+      <p class="p-4 text-center text-muted-foreground text-sm">
+        Chargement...
+      </p>
     {:else if sessions.length === 0}
-      <div class="empty">Aucune conversation</div>
+      <p class="p-4 text-center text-muted-foreground text-sm">
+        Aucune conversation
+      </p>
     {:else}
-      {#each sessions as session (session.session_id)}
-        <button
-          class="session-item"
-          class:active={currentSessionId === session.session_id}
-          on:click={() => onSelectSession(session.session_id)}
-        >
-          <div class="session-content">
-            <span class="session-title">{session.title || 'Sans titre'}</span>
-            <span class="session-date">{formatDate(session.last_activity)}</span>
-          </div>
+      <div class="space-y-1">
+        {#each sessions as session (session.session_id)}
           <button
-            class="delete-btn"
-            on:click={(e) => handleDelete(session.session_id, e)}
-            title="Supprimer"
+            class="group w-full flex items-center justify-between px-3 py-2.5 rounded-md cursor-pointer text-left transition-colors hover:bg-sidebar-accent {currentSessionId === session.session_id ? 'bg-sidebar-accent border border-sidebar-border' : ''}"
+            onclick={() => onSelectSession(session.session_id)}
           >
-            &times;
+            <div class="flex-1 min-w-0 flex flex-col gap-1">
+              <span class="text-[0.8125rem] text-sidebar-foreground truncate font-mono">
+                {session.title || 'Sans titre'}
+              </span>
+              <span class="text-[0.625rem] text-muted-foreground font-mono">
+                {formatDate(session.last_activity)}
+              </span>
+            </div>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onclick={(e: Event) => handleDelete(session.session_id, e)}
+              title="Supprimer"
+              class="opacity-0 group-hover:opacity-100 hover:text-destructive h-7 w-7"
+            >
+              <XIcon class="size-4" />
+            </Button>
           </button>
-        </button>
-      {/each}
+        {/each}
+      </div>
     {/if}
-  </div>
+  </ScrollArea>
 </aside>
-
-<style>
-  .sidebar {
-    width: 260px;
-    background: var(--color-bg-secondary);
-    border-right: 1px solid var(--color-border);
-    display: flex;
-    flex-direction: column;
-    height: 100vh;
-    flex-shrink: 0;
-  }
-
-  .sidebar-header {
-    padding: 1rem;
-    border-bottom: 1px solid var(--color-border);
-  }
-
-  .new-chat-btn {
-    width: 36px;
-    height: 36px;
-    padding: 0;
-    background: var(--color-bg-tertiary);
-    border: 1px solid var(--color-border);
-    border-radius: 6px;
-    color: var(--color-text-primary);
-    font-size: 1.25rem;
-    cursor: pointer;
-    transition: all 0.15s ease;
-    font-family: var(--font-family-mono);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-
-  .new-chat-btn:hover {
-    background: var(--color-bg-primary);
-    border-color: var(--color-border-light);
-  }
-
-  .sessions-list {
-    flex: 1;
-    overflow-y: auto;
-    padding: 0.5rem;
-  }
-
-  .loading, .empty {
-    padding: 1rem;
-    text-align: center;
-    color: var(--color-text-tertiary);
-    font-size: 0.875rem;
-  }
-
-  .session-item {
-    width: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 0.75rem;
-    margin-bottom: 0.25rem;
-    background: transparent;
-    border: none;
-    border-radius: 6px;
-    cursor: pointer;
-    text-align: left;
-    transition: background 0.15s ease;
-  }
-
-  .session-item:hover {
-    background: var(--color-bg-tertiary);
-  }
-
-  .session-item.active {
-    background: var(--color-bg-tertiary);
-    border: 1px solid var(--color-border);
-  }
-
-  .session-content {
-    flex: 1;
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 0.25rem;
-  }
-
-  .session-title {
-    font-size: 0.8125rem;
-    color: var(--color-text-primary);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    font-family: var(--font-family-mono);
-  }
-
-  .session-date {
-    font-size: 0.625rem;
-    color: var(--color-text-tertiary);
-    font-family: var(--font-family-mono);
-  }
-
-  .delete-btn {
-    opacity: 0;
-    background: none;
-    border: none;
-    color: var(--color-text-tertiary);
-    font-size: 1.25rem;
-    cursor: pointer;
-    padding: 0.25rem 0.5rem;
-    line-height: 1;
-    transition: all 0.15s ease;
-  }
-
-  .session-item:hover .delete-btn {
-    opacity: 1;
-  }
-
-  .delete-btn:hover {
-    color: var(--color-error);
-  }
-
-  /* Scrollbar */
-  .sessions-list::-webkit-scrollbar {
-    width: 4px;
-  }
-
-  .sessions-list::-webkit-scrollbar-track {
-    background: transparent;
-  }
-
-  .sessions-list::-webkit-scrollbar-thumb {
-    background: var(--color-border);
-    border-radius: 2px;
-  }
-</style>

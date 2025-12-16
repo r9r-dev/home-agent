@@ -1,13 +1,20 @@
 import { defineConfig } from 'vite'
 import { svelte } from '@sveltejs/vite-plugin-svelte'
+import tailwindcss from '@tailwindcss/vite'
 import { readFileSync } from 'fs'
+import path from 'path'
 
 const pkg = JSON.parse(readFileSync('./package.json', 'utf-8'))
 // Use APP_VERSION env var (from CI tag) or fallback to package.json
 const appVersion = process.env.APP_VERSION || pkg.version
 
 export default defineConfig({
-  plugins: [svelte()],
+  plugins: [svelte(), tailwindcss()],
+  resolve: {
+    alias: {
+      $lib: path.resolve('./src/lib'),
+    },
+  },
   define: {
     __APP_VERSION__: JSON.stringify(appVersion)
   },
