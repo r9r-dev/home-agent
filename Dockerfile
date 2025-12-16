@@ -1,8 +1,8 @@
 # Multi-stage Dockerfile for Home Agent
-# Builds both frontend and backend in a single container
+# Builds frontend and backend in PARALLEL, then combines in runtime stage
 # Claude CLI is NOT included - use CLAUDE_PROXY_URL to connect to host proxy
 
-# Stage 1: Build frontend
+# Stage 1a: Build frontend (runs in parallel with backend)
 FROM node:20-alpine AS frontend-builder
 
 # Version from git tag (passed via --build-arg)
@@ -20,7 +20,7 @@ COPY frontend/ ./
 # Build frontend with version (outputs to ../backend/public)
 RUN APP_VERSION=${APP_VERSION} npm run build
 
-# Stage 2: Build backend
+# Stage 1b: Build backend (runs in parallel with frontend)
 FROM golang:1.21-alpine AS backend-builder
 
 WORKDIR /app
@@ -35,15 +35,14 @@ RUN --mount=type=cache,target=/go/pkg/mod go mod download
 # Copy backend source
 COPY backend/ ./
 
-# Copy built frontend from previous stage
-COPY --from=frontend-builder /app/backend/public ./public
-
 # Build backend binary (CGO required for sqlite) with cache
+# Note: frontend files are copied directly to runtime stage, not here
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=1 GOOS=linux go build -ldflags="-s -w" -o home-agent .
 
-# Stage 3: Runtime image (minimal Alpine, no Node.js needed)
+# Stage 2: Runtime image (minimal Alpine, no Node.js needed)
+# This stage waits for both builders to complete, then combines their outputs
 FROM alpine:3.19
 
 # Install runtime dependencies only
@@ -59,9 +58,11 @@ RUN mkdir -p /app /data && \
 # Set working directory
 WORKDIR /app
 
-# Copy binary from builder
+# Copy binary from backend builder
 COPY --from=backend-builder --chown=appuser:appuser /app/home-agent ./
-COPY --from=backend-builder --chown=appuser:appuser /app/public ./public
+
+# Copy frontend assets directly from frontend builder
+COPY --from=frontend-builder --chown=appuser:appuser /app/backend/public ./public
 
 # Switch to non-root user
 USER appuser
