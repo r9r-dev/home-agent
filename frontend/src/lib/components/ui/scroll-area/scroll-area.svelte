@@ -10,6 +10,7 @@
 		orientation = "vertical",
 		scrollbarXClasses = "",
 		scrollbarYClasses = "",
+		type = "always",
 		children,
 		...restProps
 	}: WithoutChild<ScrollAreaPrimitive.RootProps> & {
@@ -17,6 +18,7 @@
 		scrollbarXClasses?: string | undefined;
 		scrollbarYClasses?: string | undefined;
 		viewportRef?: HTMLElement | null;
+		type?: "auto" | "always" | "scroll" | "hover";
 	} = $props();
 </script>
 
@@ -24,6 +26,7 @@
 	bind:ref
 	data-slot="scroll-area"
 	class={cn("relative", className)}
+	{type}
 	{...restProps}
 >
 	<ScrollAreaPrimitive.Viewport
