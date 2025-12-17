@@ -190,6 +190,10 @@ DATABASE_PATH=./data/homeagent.db
 PUBLIC_DIR=./public             # Built frontend directory
 UPLOAD_DIR=./data/uploads       # Directory for uploaded files
 
+# Workspace mapping (for containerized deployment)
+WORKSPACE_PATH=/workspace/uploads  # Path that Claude CLI sees (maps to UPLOAD_DIR)
+                                   # Use when backend runs in container but Claude on host
+
 # Local mode (direct CLI execution)
 CLAUDE_BIN=claude               # Path to Claude CLI binary
 ANTHROPIC_API_KEY=sk-ant-...   # Required for Claude CLI
@@ -212,12 +216,20 @@ CLAUDE_BIN=claude               # Path to Claude CLI
 The Docker image does NOT include Claude CLI. It requires connection to a Claude Proxy service running on the host:
 
 1. Install Claude Proxy on host: `curl -fsSL .../install.sh | sudo bash`
-2. Run container with proxy URL:
+2. Run container with proxy URL and workspace mapping:
    ```bash
    container run -d -p 8080:8080 \
+     -v /path/on/host/workspace:/workspace \
      -e CLAUDE_PROXY_URL=http://HOST_IP:9090 \
      -e CLAUDE_PROXY_KEY=your-key \
+     -e UPLOAD_DIR=/data/uploads \
+     -e WORKSPACE_PATH=/path/on/host/workspace/uploads \
      home-agent
    ```
+
+The `WORKSPACE_PATH` variable maps the container's upload directory to the path Claude CLI sees on the host. This is necessary because:
+- Container stores files in `/data/uploads` (internal path)
+- Host's Claude CLI needs to access files via mounted volume path
+- `WORKSPACE_PATH` tells the backend what path to send to Claude
 
 See `docs/claude-proxy.md` for detailed proxy setup.

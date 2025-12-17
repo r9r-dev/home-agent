@@ -24,7 +24,8 @@ type Config struct {
 	DatabasePath   string
 	ClaudeBin      string
 	PublicDir      string
-	UploadDir      string // Directory for uploaded files
+	UploadDir      string // Directory for uploaded files (local path)
+	WorkspacePath  string // Path prefix for Claude CLI (maps UploadDir for Claude's environment)
 	ClaudeProxyURL string // If set, use proxy instead of local CLI
 	ClaudeProxyKey string // API key for proxy authentication
 }
@@ -32,12 +33,17 @@ type Config struct {
 // loadConfig loads configuration from environment variables with defaults
 func loadConfig() Config {
 	uploadDir := getEnv("UPLOAD_DIR", "./data/uploads")
-	// Convert to absolute path for Claude CLI access
+	// Convert to absolute path for local file operations
 	absUploadDir, err := filepath.Abs(uploadDir)
 	if err != nil {
 		log.Printf("Warning: could not get absolute path for upload dir: %v", err)
 		absUploadDir = uploadDir
 	}
+
+	// WORKSPACE_PATH is the path prefix that Claude CLI sees
+	// Used when backend runs in container but Claude runs on host with mounted workspace
+	// If not set, defaults to the absolute upload dir
+	workspacePath := getEnv("WORKSPACE_PATH", "")
 
 	config := Config{
 		Port:           getEnv("PORT", "8080"),
@@ -45,6 +51,7 @@ func loadConfig() Config {
 		ClaudeBin:      getEnv("CLAUDE_BIN", "claude"),
 		PublicDir:      getEnv("PUBLIC_DIR", "./public"),
 		UploadDir:      absUploadDir,
+		WorkspacePath:  workspacePath,
 		ClaudeProxyURL: getEnv("CLAUDE_PROXY_URL", ""),
 		ClaudeProxyKey: getEnv("CLAUDE_PROXY_KEY", ""),
 	}
@@ -53,7 +60,10 @@ func loadConfig() Config {
 	log.Printf("  Port: %s", config.Port)
 	log.Printf("  Database: %s", config.DatabasePath)
 	log.Printf("  Public directory: %s", config.PublicDir)
-	log.Printf("  Upload directory: %s (absolute)", config.UploadDir)
+	log.Printf("  Upload directory: %s", config.UploadDir)
+	if config.WorkspacePath != "" {
+		log.Printf("  Workspace path (for Claude): %s", config.WorkspacePath)
+	}
 
 	if config.ClaudeProxyURL != "" {
 		log.Printf("  Claude mode: proxy (%s)", config.ClaudeProxyURL)
@@ -147,7 +157,7 @@ func main() {
 	}
 
 	// Initialize handlers
-	chatHandler := handlers.NewChatHandler(sessionManager, claudeExecutor, config.UploadDir, db)
+	chatHandler := handlers.NewChatHandler(sessionManager, claudeExecutor, config.UploadDir, config.WorkspacePath, db)
 	wsHandler := handlers.NewWebSocketHandler(chatHandler)
 	uploadHandler := handlers.NewUploadHandler(config.UploadDir)
 

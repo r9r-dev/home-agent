@@ -17,17 +17,19 @@ import (
 type ChatHandler struct {
 	sessionManager *services.SessionManager
 	claudeExecutor services.ClaudeExecutor
-	uploadDir      string
+	uploadDir      string // Local path for file storage
+	workspacePath  string // Path prefix for Claude CLI (if different from uploadDir)
 	db             *models.DB
 }
 
 // NewChatHandler creates a new ChatHandler instance
-func NewChatHandler(sessionManager *services.SessionManager, claudeExecutor services.ClaudeExecutor, uploadDir string, db *models.DB) *ChatHandler {
+func NewChatHandler(sessionManager *services.SessionManager, claudeExecutor services.ClaudeExecutor, uploadDir string, workspacePath string, db *models.DB) *ChatHandler {
 	log.Println("Initializing ChatHandler")
 	return &ChatHandler{
 		sessionManager: sessionManager,
 		claudeExecutor: claudeExecutor,
 		uploadDir:      uploadDir,
+		workspacePath:  workspacePath,
 		db:             db,
 	}
 }
@@ -297,13 +299,9 @@ func (ch *ChatHandler) buildPromptWithAttachments(content string, attachments []
 		}
 
 		if att.Type == "image" {
-			// For images, provide the absolute path for Claude to read
-			absPath, err := filepath.Abs(physicalPath)
-			if err != nil {
-				log.Printf("Warning: could not get absolute path for %s: %v", physicalPath, err)
-				continue
-			}
-			sb.WriteString(fmt.Sprintf("[Image: %s]\nPlease read and analyze this image file: %s\n\n", att.Filename, absPath))
+			// For images, provide the path for Claude to read
+			claudePath := ch.getClaudePath(physicalPath)
+			sb.WriteString(fmt.Sprintf("[Image: %s]\nPlease read and analyze this image file: %s\n\n", att.Filename, claudePath))
 		} else {
 			// For text files, read and include the content directly
 			fileContent, err := ch.readFileContent(physicalPath)
@@ -324,6 +322,32 @@ func (ch *ChatHandler) buildPromptWithAttachments(content string, attachments []
 	}
 
 	return sb.String()
+}
+
+// getClaudePath returns the path that Claude CLI should use to access the file
+// If workspacePath is set, maps the local path to the workspace path
+// Otherwise returns the absolute local path
+func (ch *ChatHandler) getClaudePath(localPath string) string {
+	if ch.workspacePath != "" {
+		// Extract the relative path from uploadDir
+		relPath, err := filepath.Rel(ch.uploadDir, localPath)
+		if err != nil {
+			log.Printf("Warning: could not get relative path for %s: %v", localPath, err)
+			return localPath
+		}
+		// Build the Claude path using workspacePath as base
+		claudePath := filepath.Join(ch.workspacePath, relPath)
+		log.Printf("Mapped local path %s to Claude path %s", localPath, claudePath)
+		return claudePath
+	}
+
+	// No workspace mapping, use absolute local path
+	absPath, err := filepath.Abs(localPath)
+	if err != nil {
+		log.Printf("Warning: could not get absolute path for %s: %v", localPath, err)
+		return localPath
+	}
+	return absPath
 }
 
 // getPhysicalPath converts an API path to a physical file path
