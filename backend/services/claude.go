@@ -360,10 +360,11 @@ func (lce *LocalClaudeExecutor) GenerateTitleSummary(userMessage, assistantRespo
 		assistantResponse = assistantResponse[:500]
 	}
 
-	prompt := "Genere un titre tres court (maximum 40 caracteres) qui resume cette conversation. " +
-		"Reponds UNIQUEMENT avec le titre, sans guillemets, sans explication.\n\n" +
-		"Utilisateur: " + userMessage + "\n\n" +
-		"Assistant: " + assistantResponse
+	prompt := "Tu dois generer un titre EN FRANCAIS, tres court (maximum 40 caracteres) qui resume cette conversation. " +
+		"IMPORTANT: Le titre doit etre en francais. " +
+		"Reponds UNIQUEMENT avec le titre, sans guillemets, sans ponctuation finale, sans explication.\n\n" +
+		"Message de l'utilisateur: " + userMessage + "\n\n" +
+		"Reponse de l'assistant: " + assistantResponse
 
 	// Use haiku model for quick title generation
 	cmd := exec.CommandContext(ctx, lce.claudeBin,

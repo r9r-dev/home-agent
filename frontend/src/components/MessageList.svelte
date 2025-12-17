@@ -51,6 +51,59 @@
   }
 
   /**
+   * Parse attachments from message content (for historical messages)
+   * Format: <!-- attachments:id|filename|path|type,id|filename|path|type,... -->
+   */
+  function parseAttachmentsFromContent(content: string): { cleanContent: string; attachments: MessageAttachment[] } {
+    const attachmentRegex = /<!-- attachments:(.*?) -->/;
+    const match = content.match(attachmentRegex);
+
+    if (!match) {
+      return { cleanContent: content, attachments: [] };
+    }
+
+    const attachments: MessageAttachment[] = [];
+    const attachmentStr = match[1];
+
+    if (attachmentStr) {
+      const parts = attachmentStr.split(',');
+      for (const part of parts) {
+        const [id, filename, path, type] = part.split('|');
+        if (id && filename && path && type) {
+          attachments.push({ id, filename, path, type: type as 'image' | 'file' });
+        }
+      }
+    }
+
+    // Remove the attachment comment from content
+    const cleanContent = content.replace(attachmentRegex, '').trim();
+
+    return { cleanContent, attachments };
+  }
+
+  /**
+   * Get attachments for a message (from message.attachments or parsed from content)
+   */
+  function getMessageAttachments(message: Message): MessageAttachment[] {
+    if (message.attachments && message.attachments.length > 0) {
+      return message.attachments;
+    }
+    const { attachments } = parseAttachmentsFromContent(message.content);
+    return attachments;
+  }
+
+  /**
+   * Get clean content for a message (without attachment comments)
+   */
+  function getCleanContent(message: Message): string {
+    if (message.attachments && message.attachments.length > 0) {
+      return message.content;
+    }
+    const { cleanContent } = parseAttachmentsFromContent(message.content);
+    return cleanContent;
+  }
+
+  /**
    * Format timestamp (24h format)
    */
   function formatTime(date: Date): string {
@@ -157,7 +210,11 @@
         </p>
       </div>
     {:else}
-      {#each messages as message (message.id)}
+      {#each messages as message, index (message.id)}
+        <!-- Add separator between consecutive assistant messages -->
+        {#if index > 0 && message.role === 'assistant' && messages[index - 1].role === 'assistant'}
+          <hr class="border-t border-border my-2 w-full" />
+        {/if}
         <div
           class="flex flex-col max-w-full {message.role === 'user' ? 'self-end items-end max-w-[80%]' : 'self-start items-start'}"
           data-role={message.role}
@@ -165,9 +222,11 @@
           <div class="{message.role === 'user' ? 'bg-muted border border-border rounded-lg px-5 py-4' : ''}">
             {#if message.role === 'user'}
               <!-- User message with potential attachments -->
-              {#if message.attachments && message.attachments.length > 0}
+              {@const attachments = getMessageAttachments(message)}
+              {@const cleanContent = getCleanContent(message)}
+              {#if attachments.length > 0}
                 <div class="flex flex-wrap gap-2 mb-3">
-                  {#each message.attachments as attachment (attachment.id)}
+                  {#each attachments as attachment (attachment.id)}
                     {#if attachment.type === 'image'}
                       <a href={attachment.path} target="_blank" rel="noopener noreferrer" class="block">
                         <img
@@ -190,9 +249,9 @@
                   {/each}
                 </div>
               {/if}
-              {#if message.content}
+              {#if cleanContent}
                 <div class="text-sm leading-relaxed font-mono whitespace-pre-wrap text-foreground">
-                  {message.content}
+                  {cleanContent}
                 </div>
               {/if}
             {:else}

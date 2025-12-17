@@ -31,12 +31,20 @@ type Config struct {
 
 // loadConfig loads configuration from environment variables with defaults
 func loadConfig() Config {
+	uploadDir := getEnv("UPLOAD_DIR", "./data/uploads")
+	// Convert to absolute path for Claude CLI access
+	absUploadDir, err := filepath.Abs(uploadDir)
+	if err != nil {
+		log.Printf("Warning: could not get absolute path for upload dir: %v", err)
+		absUploadDir = uploadDir
+	}
+
 	config := Config{
 		Port:           getEnv("PORT", "8080"),
 		DatabasePath:   getEnv("DATABASE_PATH", "./data/homeagent.db"),
 		ClaudeBin:      getEnv("CLAUDE_BIN", "claude"),
 		PublicDir:      getEnv("PUBLIC_DIR", "./public"),
-		UploadDir:      getEnv("UPLOAD_DIR", "./data/uploads"),
+		UploadDir:      absUploadDir,
 		ClaudeProxyURL: getEnv("CLAUDE_PROXY_URL", ""),
 		ClaudeProxyKey: getEnv("CLAUDE_PROXY_KEY", ""),
 	}
@@ -45,7 +53,7 @@ func loadConfig() Config {
 	log.Printf("  Port: %s", config.Port)
 	log.Printf("  Database: %s", config.DatabasePath)
 	log.Printf("  Public directory: %s", config.PublicDir)
-	log.Printf("  Upload directory: %s", config.UploadDir)
+	log.Printf("  Upload directory: %s (absolute)", config.UploadDir)
 
 	if config.ClaudeProxyURL != "" {
 		log.Printf("  Claude mode: proxy (%s)", config.ClaudeProxyURL)

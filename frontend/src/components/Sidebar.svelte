@@ -155,20 +155,6 @@
         <span class="text-sm">Rechercher</span>
       {/if}
     </Button>
-
-    <!-- Parametres -->
-    <Button
-      variant="ghost"
-      onclick={() => settingsDialogOpen = true}
-      title="Parametres"
-      class="text-muted-foreground {isCollapsed ? 'w-full justify-center px-0' : 'w-full justify-start gap-3'}"
-      size={isCollapsed ? 'icon' : 'default'}
-    >
-      <Icon icon="mynaui:cog" class="size-5 shrink-0" />
-      {#if !isCollapsed}
-        <span class="text-sm">Parametres</span>
-      {/if}
-    </Button>
   </div>
 
   <Separator />
@@ -229,6 +215,23 @@
         </div>
       {/if}
     </ScrollArea>
+  </div>
+
+  <!-- Bottom section: Settings -->
+  <Separator />
+  <div class="px-2 py-3">
+    <Button
+      variant="ghost"
+      onclick={() => settingsDialogOpen = true}
+      title="Parametres"
+      class="text-muted-foreground {isCollapsed ? 'w-full justify-center px-0' : 'w-full justify-start gap-3'}"
+      size={isCollapsed ? 'icon' : 'default'}
+    >
+      <Icon icon="mynaui:cog" class="size-5 shrink-0" />
+      {#if !isCollapsed}
+        <span class="text-sm">Parametres</span>
+      {/if}
+    </Button>
   </div>
 </aside>
 
