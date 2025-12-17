@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/ronan/home-agent/models"
 	"github.com/ronan/home-agent/services"
 )
 
@@ -17,15 +18,17 @@ type ChatHandler struct {
 	sessionManager *services.SessionManager
 	claudeExecutor services.ClaudeExecutor
 	uploadDir      string
+	db             *models.DB
 }
 
 // NewChatHandler creates a new ChatHandler instance
-func NewChatHandler(sessionManager *services.SessionManager, claudeExecutor services.ClaudeExecutor, uploadDir string) *ChatHandler {
+func NewChatHandler(sessionManager *services.SessionManager, claudeExecutor services.ClaudeExecutor, uploadDir string, db *models.DB) *ChatHandler {
 	log.Println("Initializing ChatHandler")
 	return &ChatHandler{
 		sessionManager: sessionManager,
 		claudeExecutor: claudeExecutor,
 		uploadDir:      uploadDir,
+		db:             db,
 	}
 }
 
@@ -114,7 +117,18 @@ func (ch *ChatHandler) HandleMessage(ctx context.Context, request MessageRequest
 			log.Printf("Using stored Claude session ID: %s", claudeSessionID)
 		}
 	}
-	claudeResponseChan, err := ch.claudeExecutor.ExecuteClaude(ctx, prompt, claudeSessionID, model)
+
+	// Get custom instructions from settings
+	customInstructions := ""
+	if ch.db != nil {
+		if instructions, err := ch.db.GetSetting("custom_instructions"); err == nil {
+			customInstructions = instructions
+		} else {
+			log.Printf("Warning: failed to get custom instructions: %v", err)
+		}
+	}
+
+	claudeResponseChan, err := ch.claudeExecutor.ExecuteClaude(ctx, prompt, claudeSessionID, model, customInstructions)
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute claude: %w", err)
 	}

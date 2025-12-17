@@ -8,11 +8,12 @@ import (
 // It can be implemented by either a local executor (direct CLI execution)
 // or a proxy executor (remote execution via WebSocket).
 type ClaudeExecutor interface {
-	// ExecuteClaude executes Claude with the given prompt, optional session ID, and model.
+	// ExecuteClaude executes Claude with the given prompt, optional session ID, model, and custom instructions.
 	// Model can be "haiku", "sonnet", or "opus" (defaults to "haiku" if empty).
+	// customInstructions are appended to the system prompt if provided.
 	// Returns a channel that streams ClaudeResponse events.
 	// The channel will be closed when the execution completes.
-	ExecuteClaude(ctx context.Context, prompt string, sessionID string, model string) (<-chan ClaudeResponse, error)
+	ExecuteClaude(ctx context.Context, prompt string, sessionID string, model string, customInstructions string) (<-chan ClaudeResponse, error)
 
 	// GenerateTitleSummary generates a short title for a conversation.
 	// Uses a fast model (haiku) for quick generation.

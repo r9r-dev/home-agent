@@ -139,7 +139,7 @@ func main() {
 	}
 
 	// Initialize handlers
-	chatHandler := handlers.NewChatHandler(sessionManager, claudeExecutor, config.UploadDir)
+	chatHandler := handlers.NewChatHandler(sessionManager, claudeExecutor, config.UploadDir, db)
 	wsHandler := handlers.NewWebSocketHandler(chatHandler)
 	uploadHandler := handlers.NewUploadHandler(config.UploadDir)
 
@@ -244,6 +244,42 @@ func main() {
 		}
 
 		return c.JSON(fiber.Map{"session_id": sessionID, "model": body.Model})
+	})
+
+	// Settings API
+	app.Get("/api/settings", func(c *fiber.Ctx) error {
+		settings, err := db.GetAllSettings()
+		if err != nil {
+			return c.Status(500).JSON(fiber.Map{"error": err.Error()})
+		}
+		return c.JSON(settings)
+	})
+
+	app.Put("/api/settings/:key", func(c *fiber.Ctx) error {
+		key := c.Params("key")
+
+		var body struct {
+			Value string `json:"value"`
+		}
+		if err := c.BodyParser(&body); err != nil {
+			return c.Status(400).JSON(fiber.Map{"error": "Invalid request body"})
+		}
+
+		// Validate custom_instructions length (max 2000 chars)
+		if key == "custom_instructions" && len(body.Value) > 2000 {
+			return c.Status(400).JSON(fiber.Map{"error": "Custom instructions must be 2000 characters or less"})
+		}
+
+		if err := db.SetSetting(key, body.Value); err != nil {
+			return c.Status(500).JSON(fiber.Map{"error": err.Error()})
+		}
+
+		return c.JSON(fiber.Map{"key": key, "value": body.Value})
+	})
+
+	// System prompt API (for preview in frontend)
+	app.Get("/api/system-prompt", func(c *fiber.Ctx) error {
+		return c.JSON(fiber.Map{"prompt": services.GetSystemPrompt()})
 	})
 
 	// Register WebSocket routes

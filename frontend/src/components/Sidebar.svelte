@@ -7,6 +7,7 @@
   import * as Dialog from "$lib/components/ui/dialog";
   import { sidebarStore } from '../stores/sidebarStore';
   import Icon from "@iconify/svelte";
+  import SettingsDialog from './SettingsDialog.svelte';
 
   interface Props {
     currentSessionId?: string | null;
@@ -39,6 +40,9 @@
   // Delete confirmation dialog state
   let deleteDialogOpen = $state(false);
   let sessionToDelete = $state<string | null>(null);
+
+  // Settings dialog state
+  let settingsDialogOpen = $state(false);
 
   async function loadSessions() {
     try {
@@ -151,6 +155,20 @@
         <span class="text-sm">Rechercher</span>
       {/if}
     </Button>
+
+    <!-- Parametres -->
+    <Button
+      variant="ghost"
+      onclick={() => settingsDialogOpen = true}
+      title="Parametres"
+      class="text-muted-foreground {isCollapsed ? 'w-full justify-center px-0' : 'w-full justify-start gap-3'}"
+      size={isCollapsed ? 'icon' : 'default'}
+    >
+      <Icon icon="mynaui:cog" class="size-5 shrink-0" />
+      {#if !isCollapsed}
+        <span class="text-sm">Parametres</span>
+      {/if}
+    </Button>
   </div>
 
   <Separator />
@@ -233,3 +251,6 @@
     </Dialog.Footer>
   </Dialog.Content>
 </Dialog.Root>
+
+<!-- Settings dialog -->
+<SettingsDialog bind:open={settingsDialogOpen} />

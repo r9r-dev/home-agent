@@ -134,3 +134,44 @@ export async function deleteUploadedFile(fileId: string, sessionId?: string): Pr
     throw new Error('Failed to delete file');
   }
 }
+
+/**
+ * Fetch all settings
+ */
+export async function fetchSettings(): Promise<Record<string, string>> {
+  const response = await fetch(`${API_BASE}/settings`);
+  if (!response.ok) {
+    throw new Error('Failed to fetch settings');
+  }
+  const data = await response.json();
+  return data || {};
+}
+
+/**
+ * Update a setting
+ */
+export async function updateSetting(key: string, value: string): Promise<void> {
+  const response = await fetch(`${API_BASE}/settings/${key}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ value }),
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: 'Update failed' }));
+    throw new Error(error.error || 'Failed to update setting');
+  }
+}
+
+/**
+ * Fetch the base system prompt
+ */
+export async function fetchSystemPrompt(): Promise<string> {
+  const response = await fetch(`${API_BASE}/system-prompt`);
+  if (!response.ok) {
+    throw new Error('Failed to fetch system prompt');
+  }
+  const data = await response.json();
+  return data.prompt || '';
+}

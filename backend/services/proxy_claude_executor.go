@@ -33,10 +33,11 @@ type ProxyConfig struct {
 
 // ProxyRequest represents a request sent to the proxy
 type ProxyRequest struct {
-	Type      string `json:"type"`                 // "execute"
-	Prompt    string `json:"prompt"`               // The prompt to send to Claude
-	SessionID string `json:"session_id,omitempty"` // Optional session ID for resume
-	Model     string `json:"model,omitempty"`      // Claude model: haiku, sonnet, opus
+	Type               string `json:"type"`                          // "execute"
+	Prompt             string `json:"prompt"`                        // The prompt to send to Claude
+	SessionID          string `json:"session_id,omitempty"`          // Optional session ID for resume
+	Model              string `json:"model,omitempty"`               // Claude model: haiku, sonnet, opus
+	CustomInstructions string `json:"custom_instructions,omitempty"` // Optional custom instructions for system prompt
 }
 
 // ProxyResponse represents a response from the proxy
@@ -95,13 +96,13 @@ func NewProxyClaudeExecutor(config ProxyConfig) *ProxyClaudeExecutor {
 }
 
 // ExecuteClaude connects to the proxy service and streams Claude's response
-func (pce *ProxyClaudeExecutor) ExecuteClaude(ctx context.Context, prompt string, sessionID string, model string) (<-chan ClaudeResponse, error) {
+func (pce *ProxyClaudeExecutor) ExecuteClaude(ctx context.Context, prompt string, sessionID string, model string, customInstructions string) (<-chan ClaudeResponse, error) {
 	// Default to haiku if model not specified
 	if model == "" {
 		model = "haiku"
 	}
 
-	log.Printf("ProxyExecutor: Executing Claude via proxy, prompt length: %d, sessionID: %s, model: %s", len(prompt), sessionID, model)
+	log.Printf("ProxyExecutor: Executing Claude via proxy, prompt length: %d, sessionID: %s, model: %s, customInstructions: %d chars", len(prompt), sessionID, model, len(customInstructions))
 
 	responseChan := make(chan ClaudeResponse, 100)
 
@@ -126,10 +127,11 @@ func (pce *ProxyClaudeExecutor) ExecuteClaude(ctx context.Context, prompt string
 
 		// Send execute request
 		request := ProxyRequest{
-			Type:      "execute",
-			Prompt:    prompt,
-			SessionID: sessionID,
-			Model:     model,
+			Type:               "execute",
+			Prompt:             prompt,
+			SessionID:          sessionID,
+			Model:              model,
+			CustomInstructions: customInstructions,
 		}
 
 		if err := conn.WriteJSON(request); err != nil {

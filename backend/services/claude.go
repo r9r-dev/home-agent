@@ -69,8 +69,8 @@ func (lce *LocalClaudeExecutor) SetTimeout(timeout time.Duration) {
 	lce.timeout = timeout
 }
 
-// System prompt for Home Agent
-const systemPrompt = `You are a system administrator assistant running on a home server infrastructure.
+// baseSystemPrompt is the default system prompt for Home Agent
+const baseSystemPrompt = `You are a system administrator assistant running on a home server infrastructure.
 You have access to the command line and can execute commands to help manage and monitor the systems.
 Your role is to help with:
 - Server administration and maintenance
@@ -84,19 +84,36 @@ You are NOT in a development environment. You are managing production home infra
 Be careful with destructive commands and always confirm before making significant changes.
 Respond in the same language as the user.`
 
+// GetSystemPrompt returns the base system prompt for display in frontend
+func GetSystemPrompt() string {
+	return baseSystemPrompt
+}
+
+// buildSystemPrompt constructs the final system prompt with optional custom instructions
+func buildSystemPrompt(customInstructions string) string {
+	if customInstructions == "" {
+		return baseSystemPrompt
+	}
+	return baseSystemPrompt + "\n\n## Instructions personnalisees\n" + customInstructions
+}
+
 // ExecuteClaude executes the Claude Code CLI and streams the response
 // If sessionID is provided, it resumes the existing session
 // Model can be "haiku", "sonnet", or "opus" (defaults to "haiku" if empty)
-func (lce *LocalClaudeExecutor) ExecuteClaude(ctx context.Context, prompt string, sessionID string, model string) (<-chan ClaudeResponse, error) {
+// customInstructions are appended to the system prompt if provided
+func (lce *LocalClaudeExecutor) ExecuteClaude(ctx context.Context, prompt string, sessionID string, model string, customInstructions string) (<-chan ClaudeResponse, error) {
 	// Default to haiku if model not specified
 	if model == "" {
 		model = "haiku"
 	}
 
-	log.Printf("Executing Claude with prompt (length: %d), sessionID: %s, model: %s", len(prompt), sessionID, model)
+	log.Printf("Executing Claude with prompt (length: %d), sessionID: %s, model: %s, customInstructions: %d chars", len(prompt), sessionID, model, len(customInstructions))
 
 	// Create a context with timeout
 	ctx, cancel := context.WithTimeout(ctx, lce.timeout)
+
+	// Build the system prompt with custom instructions
+	finalSystemPrompt := buildSystemPrompt(customInstructions)
 
 	// Build command arguments
 	args := []string{
@@ -104,7 +121,7 @@ func (lce *LocalClaudeExecutor) ExecuteClaude(ctx context.Context, prompt string
 		"--output-format", "stream-json",
 		"--verbose",
 		"--model", model,
-		"--system-prompt", systemPrompt,
+		"--system-prompt", finalSystemPrompt,
 		"--dangerously-skip-permissions",
 	}
 

@@ -104,6 +104,14 @@ func (db *DB) createTables() error {
 	CREATE INDEX IF NOT EXISTS idx_messages_created_at ON messages(created_at);
 	`
 
+	settingsTable := `
+	CREATE TABLE IF NOT EXISTS settings (
+		key TEXT PRIMARY KEY,
+		value TEXT NOT NULL DEFAULT '',
+		updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+	);
+	`
+
 	// Execute table creation queries
 	if _, err := db.conn.Exec(sessionsTable); err != nil {
 		return fmt.Errorf("failed to create sessions table: %w", err)
@@ -111,6 +119,10 @@ func (db *DB) createTables() error {
 
 	if _, err := db.conn.Exec(messagesTable); err != nil {
 		return fmt.Errorf("failed to create messages table: %w", err)
+	}
+
+	if _, err := db.conn.Exec(settingsTable); err != nil {
+		return fmt.Errorf("failed to create settings table: %w", err)
 	}
 
 	// Run migrations (ignore errors if columns already exist)
@@ -422,6 +434,68 @@ func (db *DB) DeleteSession(sessionID string) error {
 
 	log.Printf("Deleted session: %s", sessionID)
 	return nil
+}
+
+// GetSetting retrieves a setting value by key
+func (db *DB) GetSetting(key string) (string, error) {
+	query := `SELECT value FROM settings WHERE key = ?`
+
+	var value string
+	err := db.conn.QueryRow(query, key).Scan(&value)
+
+	if err == sql.ErrNoRows {
+		return "", nil // Setting not found, return empty string
+	}
+
+	if err != nil {
+		return "", fmt.Errorf("failed to get setting: %w", err)
+	}
+
+	return value, nil
+}
+
+// SetSetting creates or updates a setting
+func (db *DB) SetSetting(key, value string) error {
+	query := `
+	INSERT INTO settings (key, value, updated_at)
+	VALUES (?, ?, ?)
+	ON CONFLICT(key) DO UPDATE SET value = ?, updated_at = ?
+	`
+
+	now := time.Now()
+	_, err := db.conn.Exec(query, key, value, now, value, now)
+	if err != nil {
+		return fmt.Errorf("failed to set setting: %w", err)
+	}
+
+	log.Printf("Setting updated: %s", key)
+	return nil
+}
+
+// GetAllSettings retrieves all settings as a map
+func (db *DB) GetAllSettings() (map[string]string, error) {
+	query := `SELECT key, value FROM settings`
+
+	rows, err := db.conn.Query(query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get settings: %w", err)
+	}
+	defer rows.Close()
+
+	settings := make(map[string]string)
+	for rows.Next() {
+		var key, value string
+		if err := rows.Scan(&key, &value); err != nil {
+			return nil, fmt.Errorf("failed to scan setting: %w", err)
+		}
+		settings[key] = value
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating settings: %w", err)
+	}
+
+	return settings, nil
 }
 
 // Close closes the database connection

@@ -86,6 +86,15 @@ File Upload Feature (v0.11.0):
 - Preview attachments before sending, display in message history
 - Key files: `handlers/upload.go`, `InputBox.svelte`, `MessageList.svelte`, `services/api.ts`
 
+Settings Feature (v0.12.0):
+- Configuration menu accessible via gear icon in sidebar
+- Centered modal dialog with two tabs: "Personnalisation" and "Apercu du prompt"
+- Custom instructions (max 2000 chars) appended to system prompt
+- Preview shows base system prompt + custom instructions
+- Settings persisted in SQLite `settings` table (key-value)
+- Key files: `SettingsDialog.svelte`, `settingsStore.ts`, `models/database.go`, `services/claude.go`
+- Endpoints: `GET /api/settings`, `PUT /api/settings/:key`, `GET /api/system-prompt`
+
 **Custom Component Modifications (re-apply after shadcn-svelte updates):**
 - `scroll-area.svelte`: Add `type = "always"` prop (default) for always-visible scrollbar
 - `scroll-area-scrollbar.svelte`: Custom classes for visible scrollbar:
@@ -115,7 +124,7 @@ The `ClaudeExecutor` interface abstracts Claude CLI execution:
 
 ```go
 type ClaudeExecutor interface {
-    ExecuteClaude(ctx, prompt, sessionID) (<-chan ClaudeResponse, error)
+    ExecuteClaude(ctx, prompt, sessionID, model, customInstructions) (<-chan ClaudeResponse, error)
     GenerateTitleSummary(userMessage, assistantResponse) (string, error)
     TestConnection() error
 }
@@ -168,6 +177,9 @@ Attachments format:
 - `GET /api/sessions/:id/messages` - Get session messages
 - `DELETE /api/sessions/:id` - Delete session
 - `PATCH /api/sessions/:id/model` - Update session model
+- `GET /api/settings` - Get all settings (key-value map)
+- `PUT /api/settings/:key` - Update a setting (body: `{"value": "..."}`)
+- `GET /api/system-prompt` - Get base system prompt for preview
 
 ## Environment Variables
 

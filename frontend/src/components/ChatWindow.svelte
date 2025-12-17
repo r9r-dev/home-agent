@@ -239,7 +239,7 @@
     <header class="bg-background border-b border-border shrink-0">
       <div class="flex justify-between items-center px-8 py-4 max-w-[1400px] mx-auto w-full">
         <div class="text-xl font-medium tracking-tight">
-          <span class="text-foreground">home</span><span class="text-muted-foreground">agent</span>
+          <span class="text-foreground">hal</span><span class="text-muted-foreground">fred</span>
         </div>
         <nav class="flex items-center gap-8">
           <Button variant="ghost" class="text-muted-foreground hover:text-foreground text-sm">
