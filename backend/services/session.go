@@ -66,8 +66,8 @@ func (sm *SessionManager) UpdateSessionActivity(sessionID string) error {
 // SaveMessage saves a message to the database
 func (sm *SessionManager) SaveMessage(sessionID, role, content string) error {
 	// Validate role
-	if role != "user" && role != "assistant" {
-		return fmt.Errorf("invalid role: %s (must be 'user' or 'assistant')", role)
+	if role != "user" && role != "assistant" && role != "thinking" {
+		return fmt.Errorf("invalid role: %s (must be 'user', 'assistant', or 'thinking')", role)
 	}
 
 	_, err := sm.db.SaveMessage(sessionID, role, content)

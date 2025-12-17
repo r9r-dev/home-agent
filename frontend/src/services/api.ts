@@ -16,7 +16,7 @@ export interface Session {
 export interface Message {
   id: number;
   session_id: string;
-  role: 'user' | 'assistant';
+  role: 'user' | 'assistant' | 'thinking';
   content: string;
   created_at: string;
 }

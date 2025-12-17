@@ -148,6 +148,7 @@ func (ch *ChatHandler) processClaudeResponse(sessionID string, isNewSession bool
 	defer close(responseChan)
 
 	var fullAssistantResponse strings.Builder
+	var fullThinkingContent strings.Builder
 
 	for claudeResp := range claudeResponseChan {
 		switch claudeResp.Type {
@@ -162,7 +163,10 @@ func (ch *ChatHandler) processClaudeResponse(sessionID string, isNewSession bool
 			}
 
 		case "thinking":
-			// Send thinking content to client (not saved to DB)
+			// Accumulate thinking content
+			fullThinkingContent.WriteString(claudeResp.Content)
+
+			// Send thinking content to client
 			responseChan <- MessageResponse{
 				Type:    "thinking",
 				Content: claudeResp.Content,
@@ -175,6 +179,12 @@ func (ch *ChatHandler) processClaudeResponse(sessionID string, isNewSession bool
 			}
 
 		case "done":
+			// Save thinking content to database (before assistant message)
+			thinkingMessage := fullThinkingContent.String()
+			if thinkingMessage != "" {
+				ch.sessionManager.SaveMessage(sessionID, "thinking", thinkingMessage)
+			}
+
 			// Save assistant's full response to database
 			assistantMessage := fullAssistantResponse.String()
 			if assistantMessage != "" {

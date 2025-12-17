@@ -15,7 +15,7 @@ export interface MessageAttachment {
 
 export interface Message {
   id: string;
-  role: 'user' | 'assistant';
+  role: 'user' | 'assistant' | 'thinking';
   content: string;
   timestamp: Date;
   attachments?: MessageAttachment[];
@@ -62,7 +62,7 @@ function createChatStore() {
     /**
      * Add a new message to the chat
      */
-    addMessage: (role: 'user' | 'assistant', content: string, attachments?: MessageAttachment[]) => {
+    addMessage: (role: 'user' | 'assistant' | 'thinking', content: string, attachments?: MessageAttachment[]) => {
       update((state) => {
         const newMessage: Message = {
           id: crypto.randomUUID(),

@@ -226,6 +226,12 @@
           </div>
         {/if}
 
+        <!-- Historical thinking message -->
+        {#if message.role === 'thinking'}
+          <div class="self-start w-full max-w-[80%]">
+            <ThinkingBlock content={message.content} />
+          </div>
+        {:else}
         <div
           class="flex flex-col max-w-full {message.role === 'user' ? 'self-end items-end max-w-[80%]' : 'self-start items-start'}"
           data-role={message.role}
@@ -275,6 +281,7 @@
             {formatTime(message.timestamp)}
           </span>
         </div>
+        {/if}
       {/each}
 
       <!-- Thinking Block: show before typing indicator if no assistant message yet -->

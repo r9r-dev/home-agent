@@ -94,7 +94,9 @@
 
       case 'thinking':
         chatStore.setTyping(true);
-        chatStore.appendToThinking(data.content);
+        if (data.content) {
+          chatStore.appendToThinking(data.content);
+        }
         break;
 
       case 'done':

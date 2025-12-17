@@ -4,27 +4,15 @@
   interface Props {
     content: string;
     isStreaming?: boolean;
+    defaultExpanded?: boolean;
   }
 
-  let { content, isStreaming = false }: Props = $props();
+  let { content, isStreaming = false, defaultExpanded = false }: Props = $props();
 
-  let expanded = $state(false);
-
-  // Preview shows first 100 characters when collapsed
-  const previewLength = 100;
-
-  let preview = $derived(
-    content.length > previewLength
-      ? content.slice(0, previewLength) + '...'
-      : content
-  );
-
-  let canExpand = $derived(content.length > previewLength);
+  let expanded = $state(defaultExpanded);
 
   function toggleExpand() {
-    if (canExpand) {
-      expanded = !expanded;
-    }
+    expanded = !expanded;
   }
 </script>
 
@@ -35,7 +23,6 @@
   <button
     class="w-full flex items-center justify-between px-3 py-2 text-left hover:bg-primary/10 transition-colors"
     onclick={toggleExpand}
-    disabled={!canExpand}
   >
     <div class="flex items-center gap-2 text-primary">
       <Icon icon="mynaui:lightbulb" class="w-4 h-4" />
@@ -46,22 +33,18 @@
         </span>
       {/if}
     </div>
-    {#if canExpand}
-      <Icon
-        icon={expanded ? "mynaui:chevron-up" : "mynaui:chevron-down"}
-        class="w-4 h-4 text-muted-foreground"
-      />
-    {/if}
+    <Icon
+      icon={expanded ? "mynaui:chevron-up" : "mynaui:chevron-down"}
+      class="w-4 h-4 text-muted-foreground"
+    />
   </button>
 
-  <!-- Content -->
-  <div class="px-3 pb-3">
-    <div class="font-mono text-sm text-muted-foreground whitespace-pre-wrap">
-      {#if expanded || !canExpand}
+  <!-- Content (only visible when expanded) -->
+  {#if expanded}
+    <div class="px-3 pb-3">
+      <div class="font-mono text-sm text-muted-foreground whitespace-pre-wrap">
         {content}
-      {:else}
-        {preview}
-      {/if}
+      </div>
     </div>
-  </div>
+  {/if}
 </div>
