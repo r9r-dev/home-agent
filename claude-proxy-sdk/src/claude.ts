@@ -22,16 +22,17 @@ You are NOT in a development environment. You are managing production home infra
 Be careful with destructive commands and always confirm before making significant changes.
 Respond in the same language as the user.`;
 
-// Map model names to Agent SDK format (latest versions as of Dec 2025)
+// Model aliases supported by Claude Agent SDK
 function mapModel(model?: string): string {
+  // SDK supports simple aliases: "haiku", "sonnet", "opus"
+  // These always point to the latest version of each model
   switch (model) {
     case "haiku":
-      return "claude-haiku-4-5-latest";
     case "opus":
-      return "claude-opus-4-5-latest";
+      return model;
     case "sonnet":
     default:
-      return "claude-sonnet-4-5-latest";
+      return "sonnet";
   }
 }
 
@@ -276,7 +277,7 @@ Message de l'utilisateur: ${truncatedUser}
 Reponse de l'assistant: ${truncatedAssistant}`;
 
   const options: Options = {
-    model: "claude-haiku-4-5-latest",
+    model: "haiku",
     tools: [],
     permissionMode: "bypassPermissions",
     allowDangerouslySkipPermissions: true,
