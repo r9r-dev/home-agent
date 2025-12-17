@@ -1,0 +1,314 @@
+/**
+ * Claude Agent SDK wrapper
+ * Provides streaming execution with hooks support
+ */
+
+import { query, type Options, type SDKMessage, type PreToolUseHookInput, type PostToolUseHookInput } from "@anthropic-ai/claude-agent-sdk";
+import type { ProxyRequest, ProxyResponse } from "./types.js";
+import { auditLog } from "./hooks/audit.js";
+
+// System prompt for Home Agent
+const SYSTEM_PROMPT = `You are a system administrator assistant running on a home server infrastructure.
+You have access to the command line and can execute commands to help manage and monitor the systems.
+Your role is to help with:
+- Server administration and maintenance
+- Container management (Docker)
+- System monitoring and troubleshooting
+- Network configuration
+- Security audits and hardening
+- Backup and recovery operations
+
+You are NOT in a development environment. You are managing production home infrastructure.
+Be careful with destructive commands and always confirm before making significant changes.
+Respond in the same language as the user.`;
+
+// Map model names to Agent SDK format
+function mapModel(model?: string): string {
+  switch (model) {
+    case "haiku":
+      return "claude-3-5-haiku-latest";
+    case "opus":
+      return "claude-opus-4-5-20251101";
+    case "sonnet":
+    default:
+      return "claude-sonnet-4-20250514";
+  }
+}
+
+/**
+ * Execute a prompt using Claude Agent SDK
+ * Yields ProxyResponse objects compatible with the Go backend protocol
+ */
+export async function* executePrompt(
+  request: ProxyRequest
+): AsyncGenerator<ProxyResponse> {
+  const {
+    prompt,
+    session_id,
+    is_new_session,
+    model,
+    custom_instructions,
+    thinking,
+  } = request;
+
+  // Build system prompt with custom instructions
+  let systemPrompt = SYSTEM_PROMPT;
+  if (custom_instructions) {
+    systemPrompt += `\n\n## Instructions personnalisees\n${custom_instructions}`;
+  }
+
+  // Build Agent SDK options
+  const options: Options = {
+    // Tools available to the agent
+    tools: ["Read", "Write", "Edit", "Bash", "Glob", "Grep"],
+
+    // Auto-allow these tools
+    allowedTools: ["Read", "Write", "Edit", "Bash", "Glob", "Grep"],
+
+    // Permission mode - accept edits without prompting
+    permissionMode: "acceptEdits",
+
+    // Model selection
+    model: mapModel(model),
+
+    // System prompt
+    systemPrompt,
+
+    // Include streaming events
+    includePartialMessages: true,
+
+    // Extended thinking mode
+    ...(thinking && {
+      maxThinkingTokens: 10000,
+    }),
+
+    // Session management
+    ...(session_id &&
+      !is_new_session && {
+        resume: session_id,
+      }),
+
+    // Hooks for auditing (using callback hooks instead of shell commands)
+    hooks: {
+      PreToolUse: [
+        {
+          matcher: "Bash",
+          hooks: [
+            async (input, _toolUseId, _options) => {
+              const hookInput = input as PreToolUseHookInput;
+              auditLog({
+                timestamp: new Date(),
+                sessionId: session_id,
+                event: "PreToolUse",
+                tool: "Bash",
+                details: { input: hookInput.tool_input },
+              });
+              return { continue: true };
+            },
+          ],
+        },
+      ],
+      PostToolUse: [
+        {
+          matcher: "Edit|Write",
+          hooks: [
+            async (input, _toolUseId, _options) => {
+              const hookInput = input as PostToolUseHookInput;
+              auditLog({
+                timestamp: new Date(),
+                sessionId: session_id,
+                event: "PostToolUse",
+                tool: hookInput.tool_name,
+                details: { input: hookInput.tool_input },
+              });
+              return { continue: true };
+            },
+          ],
+        },
+      ],
+    },
+  };
+
+  auditLog({
+    timestamp: new Date(),
+    sessionId: session_id,
+    event: "execute",
+    details: { model, thinking, is_new_session },
+  });
+
+  let detectedSessionId: string | undefined;
+  let fullResponse = "";
+
+  try {
+    for await (const message of query({ prompt, options })) {
+      const response = processMessage(message, session_id);
+
+      if (response) {
+        // Track session ID
+        if (response.type === "session_id" && response.session_id) {
+          detectedSessionId = response.session_id;
+        }
+
+        // Accumulate text content
+        if (response.type === "chunk" && response.content) {
+          fullResponse += response.content;
+        }
+
+        yield response;
+      }
+    }
+
+    // Send done message
+    yield {
+      type: "done",
+      content: fullResponse,
+      session_id: detectedSessionId || session_id,
+    };
+  } catch (error) {
+    const errorMessage =
+      error instanceof Error ? error.message : "Unknown error";
+    auditLog({
+      timestamp: new Date(),
+      sessionId: session_id,
+      event: "error",
+      details: { error: errorMessage },
+    });
+
+    yield {
+      type: "error",
+      error: errorMessage,
+    };
+  }
+}
+
+/**
+ * Process an SDK message and convert to ProxyResponse
+ * We track if we've received streaming content to avoid duplicates
+ */
+let hasReceivedStreamContent = false;
+
+function processMessage(message: SDKMessage, sessionId?: string): ProxyResponse | null {
+  switch (message.type) {
+    case "system":
+      if (message.subtype === "init") {
+        // Reset streaming flag for new session
+        hasReceivedStreamContent = false;
+        // Capture session ID from init message
+        return {
+          type: "session_id",
+          session_id: message.session_id,
+        };
+      }
+      break;
+
+    case "assistant":
+      // Skip full assistant message if we already streamed the content
+      // This avoids duplicating the response
+      if (hasReceivedStreamContent) {
+        break;
+      }
+      // Full assistant message (non-streaming fallback)
+      if (message.message?.content) {
+        const content = message.message.content;
+        if (Array.isArray(content)) {
+          for (const block of content) {
+            if (block.type === "text" && "text" in block) {
+              return {
+                type: "chunk",
+                content: block.text,
+              };
+            } else if (block.type === "thinking" && "thinking" in block) {
+              return {
+                type: "thinking",
+                content: (block as { type: "thinking"; thinking: string }).thinking,
+              };
+            }
+          }
+        }
+      }
+      break;
+
+    case "stream_event":
+      // Streaming delta content
+      const event = message.event;
+      if (event.type === "content_block_delta") {
+        const delta = event.delta;
+        if (delta.type === "text_delta" && "text" in delta) {
+          hasReceivedStreamContent = true;
+          return {
+            type: "chunk",
+            content: delta.text,
+          };
+        } else if (delta.type === "thinking_delta" && "thinking" in delta) {
+          hasReceivedStreamContent = true;
+          return {
+            type: "thinking",
+            content: (delta as { type: "thinking_delta"; thinking: string }).thinking,
+          };
+        }
+      }
+      break;
+
+    case "result":
+      // Final result - don't send as we handle this separately
+      break;
+  }
+
+  return null;
+}
+
+/**
+ * Generate a title summary for a conversation
+ */
+export async function generateTitle(
+  userMessage: string,
+  assistantResponse: string
+): Promise<string> {
+  const truncatedUser = userMessage.slice(0, 500);
+  const truncatedAssistant = assistantResponse.slice(0, 500);
+
+  const prompt = `Tu dois generer un titre EN FRANCAIS, tres court (maximum 40 caracteres) qui resume cette conversation.
+IMPORTANT: Le titre doit etre en francais.
+Reponds UNIQUEMENT avec le titre, sans guillemets, sans ponctuation finale, sans explication.
+
+Message de l'utilisateur: ${truncatedUser}
+
+Reponse de l'assistant: ${truncatedAssistant}`;
+
+  const options: Options = {
+    model: "claude-3-5-haiku-latest",
+    tools: [],
+    permissionMode: "bypassPermissions",
+    allowDangerouslySkipPermissions: true,
+    maxTurns: 1,
+    includePartialMessages: true,
+  };
+
+  let title = "";
+
+  for await (const message of query({ prompt, options })) {
+    if (message.type === "stream_event") {
+      const event = message.event;
+      if (event.type === "content_block_delta" && event.delta.type === "text_delta" && "text" in event.delta) {
+        title += event.delta.text;
+      }
+    } else if (message.type === "assistant" && message.message?.content) {
+      const content = message.message.content;
+      if (Array.isArray(content)) {
+        for (const block of content) {
+          if (block.type === "text" && "text" in block) {
+            title += block.text;
+          }
+        }
+      }
+    }
+  }
+
+  // Clean up title
+  title = title.trim().replace(/^["']|["']$/g, "");
+  if (title.length > 50) {
+    title = title.slice(0, 47) + "...";
+  }
+
+  return title;
+}

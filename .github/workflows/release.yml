@@ -14,44 +14,6 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-  # Build Claude Proxy binary
-  build-proxy:
-    name: Build Claude Proxy
-    runs-on: self-hosted
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.24'
-          cache-dependency-path: claude-proxy/go.sum
-
-      - name: Get version
-        id: version
-        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
-
-      - name: Build claude-proxy binary
-        working-directory: ./claude-proxy
-        env:
-          GOOS: linux
-          GOARCH: amd64
-          CGO_ENABLED: 0
-        run: |
-          go build -ldflags="-s -w -X main.Version=${{ steps.version.outputs.VERSION }}" -o claude-proxy .
-
-      - name: Create archive
-        working-directory: ./claude-proxy
-        run: |
-          tar -czvf claude-proxy-linux-amd64.tar.gz claude-proxy
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: claude-proxy-linux-amd64
-          path: ./claude-proxy/claude-proxy-linux-amd64.tar.gz
-
   # Build and push Docker image
   build-docker:
     name: Build Docker Image
@@ -103,29 +65,18 @@ jobs:
           rm -rf /tmp/.buildx-cache
           mv /tmp/.buildx-cache-new /tmp/.buildx-cache
 
-  # Create GitHub Release with all artifacts
+  # Create GitHub Release
   release:
     name: Create Release
-    needs: [build-proxy, build-docker]
+    needs: [build-docker]
     runs-on: self-hosted
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: ./artifacts
-
       - name: Get version
         id: version
         run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
-
-      - name: Generate checksums
-        run: |
-          cd artifacts
-          sha256sum */claude-proxy-*.tar.gz > checksums.txt
-          cat checksums.txt
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
@@ -141,26 +92,36 @@ jobs:
             docker pull ghcr.io/${{ github.repository }}:${{ steps.version.outputs.VERSION }}
             ```
 
-            ### Claude Proxy Installation
+            ### Claude Proxy SDK Installation
 
-            Install or update Claude Proxy on your host:
-
-            ```bash
-            curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/main/claude-proxy/install.sh | sudo bash
-            ```
-
-            Or install this specific version:
+            Install or update Claude Proxy SDK on your host:
 
             ```bash
-            curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/main/claude-proxy/install.sh | sudo bash -s -- --version ${{ steps.version.outputs.VERSION }}
+            curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/main/claude-proxy-sdk/install.sh | sudo bash
             ```
 
-            ### Claude Proxy Binary
+            The installer will:
+            - Install Node.js 20+ if needed
+            - Download and build the TypeScript proxy
+            - Create and start the systemd service
+            - Generate an API key for authentication
 
-            Download manually:
-            - `claude-proxy-linux-amd64.tar.gz` - Linux x86_64
-          files: |
-            artifacts/*/claude-proxy-*.tar.gz
-            artifacts/checksums.txt
+            ### Uninstall Claude Proxy SDK
+
+            ```bash
+            curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/main/claude-proxy-sdk/install.sh | sudo bash -s -- --uninstall
+            ```
+
+            ### Migration from Go Proxy
+
+            If you have the old Go-based proxy installed:
+
+            ```bash
+            # Uninstall old proxy
+            curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/main/claude-proxy/install.sh | sudo bash -s -- --uninstall
+
+            # Install new TypeScript proxy
+            curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/main/claude-proxy-sdk/install.sh | sudo bash
+            ```
           draft: false
           prerelease: false
