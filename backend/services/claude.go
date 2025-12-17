@@ -123,16 +123,17 @@ func buildSystemPrompt(customInstructions string) string {
 }
 
 // ExecuteClaude executes the Claude Code CLI and streams the response
-// If sessionID is provided, it resumes the existing session
+// sessionID: The session UUID to use for this conversation
+// isNewSession: If true, uses --session-id to start a new session; if false, uses --resume
 // Model can be "haiku", "sonnet", or "opus" (defaults to "haiku" if empty)
 // customInstructions are appended to the system prompt if provided
-func (lce *LocalClaudeExecutor) ExecuteClaude(ctx context.Context, prompt string, sessionID string, model string, customInstructions string) (<-chan ClaudeResponse, error) {
+func (lce *LocalClaudeExecutor) ExecuteClaude(ctx context.Context, prompt string, sessionID string, isNewSession bool, model string, customInstructions string) (<-chan ClaudeResponse, error) {
 	// Default to haiku if model not specified
 	if model == "" {
 		model = "haiku"
 	}
 
-	log.Printf("Executing Claude with prompt (length: %d), sessionID: %s, model: %s, customInstructions: %d chars", len(prompt), sessionID, model, len(customInstructions))
+	log.Printf("Executing Claude with prompt (length: %d), sessionID: %s, isNewSession: %v, model: %s, customInstructions: %d chars", len(prompt), sessionID, isNewSession, model, len(customInstructions))
 
 	// Create a context with timeout
 	ctx, cancel := context.WithTimeout(ctx, lce.timeout)
@@ -150,10 +151,17 @@ func (lce *LocalClaudeExecutor) ExecuteClaude(ctx context.Context, prompt string
 		"--dangerously-skip-permissions",
 	}
 
-	// Add resume flag if session ID is provided
+	// Add session management flag based on whether this is a new or existing session
 	if sessionID != "" {
-		args = append(args, "--resume", sessionID)
-		log.Printf("Resuming Claude session: %s", sessionID)
+		if isNewSession {
+			// New session: use --session-id to tell Claude to use our UUID
+			args = append(args, "--session-id", sessionID)
+			log.Printf("Starting new Claude session with ID: %s", sessionID)
+		} else {
+			// Existing session: use --resume to continue the conversation
+			args = append(args, "--resume", sessionID)
+			log.Printf("Resuming Claude session: %s", sessionID)
+		}
 	}
 
 	// Create the command

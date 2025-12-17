@@ -35,7 +35,8 @@ type ProxyConfig struct {
 type ProxyRequest struct {
 	Type               string `json:"type"`                          // "execute"
 	Prompt             string `json:"prompt"`                        // The prompt to send to Claude
-	SessionID          string `json:"session_id,omitempty"`          // Optional session ID for resume
+	SessionID          string `json:"session_id,omitempty"`          // Session ID (UUID)
+	IsNewSession       bool   `json:"is_new_session,omitempty"`      // True for new session (--session-id), false for resume (--resume)
 	Model              string `json:"model,omitempty"`               // Claude model: haiku, sonnet, opus
 	CustomInstructions string `json:"custom_instructions,omitempty"` // Optional custom instructions for system prompt
 }
@@ -96,13 +97,13 @@ func NewProxyClaudeExecutor(config ProxyConfig) *ProxyClaudeExecutor {
 }
 
 // ExecuteClaude connects to the proxy service and streams Claude's response
-func (pce *ProxyClaudeExecutor) ExecuteClaude(ctx context.Context, prompt string, sessionID string, model string, customInstructions string) (<-chan ClaudeResponse, error) {
+func (pce *ProxyClaudeExecutor) ExecuteClaude(ctx context.Context, prompt string, sessionID string, isNewSession bool, model string, customInstructions string) (<-chan ClaudeResponse, error) {
 	// Default to haiku if model not specified
 	if model == "" {
 		model = "haiku"
 	}
 
-	log.Printf("ProxyExecutor: Executing Claude via proxy, prompt length: %d, sessionID: %s, model: %s, customInstructions: %d chars", len(prompt), sessionID, model, len(customInstructions))
+	log.Printf("ProxyExecutor: Executing Claude via proxy, prompt length: %d, sessionID: %s, isNewSession: %v, model: %s, customInstructions: %d chars", len(prompt), sessionID, isNewSession, model, len(customInstructions))
 
 	responseChan := make(chan ClaudeResponse, 100)
 
@@ -130,6 +131,7 @@ func (pce *ProxyClaudeExecutor) ExecuteClaude(ctx context.Context, prompt string
 			Type:               "execute",
 			Prompt:             prompt,
 			SessionID:          sessionID,
+			IsNewSession:       isNewSession,
 			Model:              model,
 			CustomInstructions: customInstructions,
 		}

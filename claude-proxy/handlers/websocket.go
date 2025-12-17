@@ -26,9 +26,12 @@ func NewWebSocketHandler(claudeService *services.ClaudeService, apiKey string) *
 
 // ProxyRequest represents a request from the client
 type ProxyRequest struct {
-	Type      string `json:"type"`
-	Prompt    string `json:"prompt"`
-	SessionID string `json:"session_id,omitempty"`
+	Type               string `json:"type"`
+	Prompt             string `json:"prompt"`
+	SessionID          string `json:"session_id,omitempty"`
+	IsNewSession       bool   `json:"is_new_session,omitempty"`
+	Model              string `json:"model,omitempty"`
+	CustomInstructions string `json:"custom_instructions,omitempty"`
 }
 
 // ProxyResponse represents a response to the client
@@ -82,8 +85,8 @@ func (wsh *WebSocketHandler) HandleConnection(c *websocket.Conn) {
 			return
 		}
 
-		log.Printf("WebSocket: Received request type=%s, prompt_len=%d, session_id=%s",
-			request.Type, len(request.Prompt), request.SessionID)
+		log.Printf("WebSocket: Received request type=%s, prompt_len=%d, session_id=%s, is_new_session=%v, model=%s",
+			request.Type, len(request.Prompt), request.SessionID, request.IsNewSession, request.Model)
 
 		switch request.Type {
 		case "execute":
@@ -104,8 +107,8 @@ func (wsh *WebSocketHandler) handleExecute(c *websocket.Conn, request ProxyReque
 
 	ctx := context.Background()
 
-	// Execute Claude
-	responseChan, err := wsh.claudeService.ExecuteClaude(ctx, request.Prompt, request.SessionID)
+	// Execute Claude with session management
+	responseChan, err := wsh.claudeService.ExecuteClaude(ctx, request.Prompt, request.SessionID, request.IsNewSession, request.Model, request.CustomInstructions)
 	if err != nil {
 		log.Printf("WebSocket: Failed to execute Claude: %v", err)
 		wsh.sendError(c, err.Error())

@@ -84,23 +84,46 @@ Be careful with destructive commands and always confirm before making significan
 Respond in the same language as the user.`
 
 // ExecuteClaude executes the Claude Code CLI and streams the response
-func (cs *ClaudeService) ExecuteClaude(ctx context.Context, prompt string, sessionID string) (<-chan ClaudeResponse, error) {
-	log.Printf("Executing Claude with prompt (length: %d), sessionID: %s", len(prompt), sessionID)
+// sessionID: The session UUID to use for this conversation
+// isNewSession: If true, uses --session-id to start a new session; if false, uses --resume
+// model: Claude model (haiku, sonnet, opus) - defaults to sonnet if empty
+// customInstructions: Optional custom instructions to append to system prompt
+func (cs *ClaudeService) ExecuteClaude(ctx context.Context, prompt string, sessionID string, isNewSession bool, model string, customInstructions string) (<-chan ClaudeResponse, error) {
+	// Default to sonnet if model not specified
+	if model == "" {
+		model = "sonnet"
+	}
+
+	log.Printf("Executing Claude with prompt (length: %d), sessionID: %s, isNewSession: %v, model: %s", len(prompt), sessionID, isNewSession, model)
 
 	ctx, cancel := context.WithTimeout(ctx, cs.timeout)
+
+	// Build the system prompt with custom instructions
+	finalSystemPrompt := systemPrompt
+	if customInstructions != "" {
+		finalSystemPrompt = systemPrompt + "\n\n## Instructions personnalisees\n" + customInstructions
+	}
 
 	args := []string{
 		"-p", prompt,
 		"--output-format", "stream-json",
 		"--verbose",
-		"--model", "sonnet",
-		"--system-prompt", systemPrompt,
+		"--model", model,
+		"--system-prompt", finalSystemPrompt,
 		"--dangerously-skip-permissions",
 	}
 
+	// Add session management flag based on whether this is a new or existing session
 	if sessionID != "" {
-		args = append(args, "--resume", sessionID)
-		log.Printf("Resuming Claude session: %s", sessionID)
+		if isNewSession {
+			// New session: use --session-id to tell Claude to use our UUID
+			args = append(args, "--session-id", sessionID)
+			log.Printf("Starting new Claude session with ID: %s", sessionID)
+		} else {
+			// Existing session: use --resume to continue the conversation
+			args = append(args, "--resume", sessionID)
+			log.Printf("Resuming Claude session: %s", sessionID)
+		}
 	}
 
 	cmd := exec.CommandContext(ctx, cs.claudeBin, args...)

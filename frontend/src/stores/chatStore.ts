@@ -33,9 +33,12 @@ export interface ChatState {
   responseCompleted: boolean; // Track if last response was completed (for paragraph separation)
 }
 
+// Generate initial sessionId for first conversation
+const initialSessionId = crypto.randomUUID();
+
 const initialState: ChatState = {
   messages: [],
-  currentSessionId: null,
+  currentSessionId: initialSessionId,
   selectedModel: 'haiku',
   isConnected: false,
   isTyping: false,
@@ -157,12 +160,13 @@ function createChatStore() {
 
     /**
      * Clear all messages and reset model to default
+     * Generates a new sessionId for the next conversation
      */
     clearMessages: () => {
       update((state) => ({
         ...state,
         messages: [],
-        currentSessionId: null,
+        currentSessionId: crypto.randomUUID(),
         selectedModel: 'haiku',
       }));
     },
@@ -233,10 +237,13 @@ function createChatStore() {
     },
 
     /**
-     * Reset the entire store
+     * Reset the entire store with a new sessionId
      */
     reset: () => {
-      set(initialState);
+      set({
+        ...initialState,
+        currentSessionId: crypto.randomUUID(),
+      });
     },
   };
 }

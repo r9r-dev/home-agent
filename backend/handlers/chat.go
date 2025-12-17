@@ -105,21 +105,6 @@ func (ch *ChatHandler) HandleMessage(ctx context.Context, request MessageRequest
 		// Don't fail the request, just log the error
 	}
 
-	// Execute Claude command
-	// For new sessions, don't pass a session ID to Claude - it will create one
-	// For existing sessions, use the stored Claude session ID
-	claudeSessionID := ""
-	if !isNew {
-		// Get the Claude session ID from database
-		storedClaudeID, err := ch.sessionManager.GetClaudeSessionIDFromDB(sessionID)
-		if err != nil {
-			log.Printf("Warning: failed to get Claude session ID: %v", err)
-		} else if storedClaudeID != "" {
-			claudeSessionID = storedClaudeID
-			log.Printf("Using stored Claude session ID: %s", claudeSessionID)
-		}
-	}
-
 	// Get custom instructions from settings
 	customInstructions := ""
 	if ch.db != nil {
@@ -157,7 +142,9 @@ func (ch *ChatHandler) HandleMessage(ctx context.Context, request MessageRequest
 		}
 	}
 
-	claudeResponseChan, err := ch.claudeExecutor.ExecuteClaude(ctx, prompt, claudeSessionID, model, fullInstructions)
+	// Execute Claude with our session ID
+	// isNew determines whether to use --session-id (new) or --resume (existing)
+	claudeResponseChan, err := ch.claudeExecutor.ExecuteClaude(ctx, prompt, sessionID, isNew, model, fullInstructions)
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute claude: %w", err)
 	}
@@ -176,7 +163,6 @@ func (ch *ChatHandler) processClaudeResponse(sessionID string, isNewSession bool
 	defer close(responseChan)
 
 	var fullAssistantResponse strings.Builder
-	var finalSessionID string
 
 	for claudeResp := range claudeResponseChan {
 		switch claudeResp.Type {
@@ -191,36 +177,17 @@ func (ch *ChatHandler) processClaudeResponse(sessionID string, isNewSession bool
 			}
 
 		case "session_id":
-			// Update session ID if provided by Claude
-			if claudeResp.SessionID != "" {
-				finalSessionID = claudeResp.SessionID
-				log.Printf("Received session ID from Claude: %s", finalSessionID)
-
-				// Save Claude's session ID to database for future resumes
-				if err := ch.sessionManager.UpdateClaudeSessionID(sessionID, finalSessionID); err != nil {
-					log.Printf("Warning: failed to save Claude session ID: %v", err)
-				}
-
-				// Send our internal session ID to client (not Claude's)
-				responseChan <- MessageResponse{
-					Type:      "session_id",
-					SessionID: sessionID,
-				}
+			// With --session-id, Claude uses our UUID, so just confirm to client
+			log.Printf("Session confirmed by Claude: %s", claudeResp.SessionID)
+			responseChan <- MessageResponse{
+				Type:      "session_id",
+				SessionID: sessionID,
 			}
 
 		case "done":
 			log.Println("Claude response complete")
 
-			// Use the session ID from the done event if available (for updating Claude session ID)
-			if claudeResp.SessionID != "" && finalSessionID == "" {
-				finalSessionID = claudeResp.SessionID
-				// Save Claude's session ID to database for future resumes
-				if err := ch.sessionManager.UpdateClaudeSessionID(sessionID, finalSessionID); err != nil {
-					log.Printf("Warning: failed to save Claude session ID: %v", err)
-				}
-			}
-
-			// Save assistant's full response to database using our internal session ID
+			// Save assistant's full response to database
 			assistantMessage := fullAssistantResponse.String()
 			if assistantMessage != "" {
 				if err := ch.sessionManager.SaveMessage(sessionID, "assistant", assistantMessage); err != nil {
@@ -228,7 +195,7 @@ func (ch *ChatHandler) processClaudeResponse(sessionID string, isNewSession bool
 				}
 			}
 
-			// Send done signal to client with our internal session ID
+			// Send done signal to client
 			responseChan <- MessageResponse{
 				Type:      "done",
 				SessionID: sessionID,
