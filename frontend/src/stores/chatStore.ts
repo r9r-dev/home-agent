@@ -30,6 +30,7 @@ export interface ChatState {
   isConnected: boolean;
   isTyping: boolean;
   error: string | null;
+  responseCompleted: boolean; // Track if last response was completed (for paragraph separation)
 }
 
 const initialState: ChatState = {
@@ -39,6 +40,7 @@ const initialState: ChatState = {
   isConnected: false,
   isTyping: false,
   error: null,
+  responseCompleted: false,
 };
 
 /**
@@ -120,6 +122,7 @@ function createChatStore() {
           return {
             ...state,
             messages: [newMessage],
+            responseCompleted: false,
           };
         }
 
@@ -136,15 +139,18 @@ function createChatStore() {
           });
         } else {
           // Append to existing assistant message
+          // Add paragraph separator if previous response was completed
+          const separator = state.responseCompleted ? '\n\n' : '';
           messages[messages.length - 1] = {
             ...lastMessage,
-            content: lastMessage.content + chunk,
+            content: lastMessage.content + separator + chunk,
           };
         }
 
         return {
           ...state,
           messages,
+          responseCompleted: false,
         };
       });
     },
@@ -196,11 +202,13 @@ function createChatStore() {
 
     /**
      * Set typing indicator
+     * When typing stops, mark response as completed for paragraph separation
      */
     setTyping: (isTyping: boolean) => {
       update((state) => ({
         ...state,
         isTyping,
+        responseCompleted: !isTyping ? true : state.responseCompleted,
       }));
     },
 
