@@ -2,11 +2,19 @@ package services
 
 import (
 	"context"
+	"strings"
 )
 
-// ClaudeExecutor is the interface for executing Claude CLI commands.
-// It can be implemented by either a local executor (direct CLI execution)
-// or a proxy executor (remote execution via WebSocket).
+// ClaudeResponse represents a chunk of text from Claude's response
+type ClaudeResponse struct {
+	Type      string // "chunk", "done", "error", "session_id"
+	Content   string
+	SessionID string
+	Error     error
+}
+
+// ClaudeExecutor is the interface for executing Claude CLI commands
+// via the Claude Proxy service.
 type ClaudeExecutor interface {
 	// ExecuteClaude executes Claude with the given prompt, session ID, model, and custom instructions.
 	// sessionID: The session UUID to use (required for session management)
@@ -21,8 +29,59 @@ type ClaudeExecutor interface {
 	// Uses a fast model (haiku) for quick generation.
 	GenerateTitleSummary(userMessage, assistantResponse string) (string, error)
 
-	// TestConnection tests if the executor is available and working.
-	// For local executor, this tests the Claude binary.
-	// For proxy executor, this tests connectivity to the proxy service.
+	// TestConnection tests connectivity to the proxy service.
 	TestConnection() error
+}
+
+// baseSystemPrompt is the default system prompt for Home Agent
+const baseSystemPrompt = `You are a system administrator assistant running on a home server infrastructure.
+You have access to the command line and can execute commands to help manage and monitor the systems.
+Your role is to help with:
+- Server administration and maintenance
+- Container management (Docker)
+- System monitoring and troubleshooting
+- Network configuration
+- Security audits and hardening
+- Backup and recovery operations
+
+You are NOT in a development environment. You are managing production home infrastructure.
+Be careful with destructive commands and always confirm before making significant changes.
+Respond in the same language as the user.`
+
+// GetSystemPrompt returns the base system prompt for display in frontend
+func GetSystemPrompt() string {
+	return baseSystemPrompt
+}
+
+// BuildSystemPrompt constructs the final system prompt with optional custom instructions
+func BuildSystemPrompt(customInstructions string) string {
+	if customInstructions == "" {
+		return baseSystemPrompt
+	}
+	return baseSystemPrompt + "\n\n## Instructions personnalisees\n" + customInstructions
+}
+
+// MemoryEntry represents a memory item for prompt injection
+type MemoryEntry struct {
+	Title   string
+	Content string
+}
+
+// FormatMemoryEntries formats memory entries for injection into the prompt
+func FormatMemoryEntries(entries []MemoryEntry) string {
+	if len(entries) == 0 {
+		return ""
+	}
+
+	var builder strings.Builder
+	builder.WriteString("<user_memory>\n")
+	for _, entry := range entries {
+		builder.WriteString("- ")
+		builder.WriteString(entry.Title)
+		builder.WriteString(": ")
+		builder.WriteString(entry.Content)
+		builder.WriteString("\n")
+	}
+	builder.WriteString("</user_memory>")
+	return builder.String()
 }

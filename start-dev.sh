@@ -14,11 +14,11 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-# Check if .env exists
-if [ ! -f ".env" ] && [ ! -f "backend/.env" ]; then
-    echo -e "${YELLOW}Warning: No .env file found${NC}"
-    echo "Please create a .env file with your configuration:"
-    echo "  ANTHROPIC_API_KEY=your_key_here"
+# Check if CLAUDE_PROXY_URL is set
+if [ -z "$CLAUDE_PROXY_URL" ]; then
+    echo -e "${YELLOW}Warning: CLAUDE_PROXY_URL not set${NC}"
+    echo "Please set the environment variable:"
+    echo "  export CLAUDE_PROXY_URL=http://localhost:9090"
     echo ""
     read -p "Continue anyway? (y/N) " -n 1 -r
     echo

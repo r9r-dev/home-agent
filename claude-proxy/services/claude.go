@@ -179,6 +179,7 @@ func (cs *ClaudeService) processStream(ctx context.Context, cancel context.Cance
 
 	var fullResponse strings.Builder
 	var detectedSessionID string
+	var hasContent bool // Track if we've already sent content (for paragraph separation)
 
 	for scanner.Scan() {
 		select {
@@ -218,11 +219,21 @@ func (cs *ClaudeService) processStream(ctx context.Context, cancel context.Cance
 						if contentMap, ok := item.(map[string]interface{}); ok {
 							if contentType, ok := contentMap["type"].(string); ok && contentType == "text" {
 								if text, ok := contentMap["text"].(string); ok && text != "" {
+									// Add paragraph separator if we already have content
+									// This separates multiple assistant responses (e.g., before and after tool use)
+									if hasContent {
+										fullResponse.WriteString("\n\n")
+										responseChan <- ClaudeResponse{
+											Type:    "chunk",
+											Content: "\n\n",
+										}
+									}
 									fullResponse.WriteString(text)
 									responseChan <- ClaudeResponse{
 										Type:    "chunk",
 										Content: text,
 									}
+									hasContent = true
 								}
 							}
 						}

@@ -6,9 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Home Agent is a web chat interface that wraps Claude Code CLI. It consists of a Go backend (Fiber framework) and Svelte/TypeScript frontend communicating via WebSocket for real-time streaming responses.
 
-The system supports two execution modes:
-- **Local mode**: Backend executes Claude CLI directly on the same machine
-- **Proxy mode**: Backend connects to a remote Claude Proxy service via WebSocket, allowing the container to use Claude CLI running on the host
+The backend connects to a Claude Proxy service via WebSocket. The proxy runs on the host machine and executes Claude CLI commands on behalf of the containerized backend. This architecture allows the container to use Claude CLI without including it in the image.
 
 ## Build & Development Commands
 
@@ -95,7 +93,7 @@ Settings Feature (v0.12.0):
 - Custom instructions (max 2000 chars) appended to system prompt
 - Preview shows base system prompt + custom instructions
 - Settings persisted in SQLite `settings` table (key-value)
-- Key files: `SettingsDialog.svelte`, `settingsStore.ts`, `models/database.go`, `services/claude.go`
+- Key files: `SettingsDialog.svelte`, `settingsStore.ts`, `models/database.go`, `services/claude_executor.go`
 - Endpoints: `GET /api/settings`, `PUT /api/settings/:key`, `GET /api/system-prompt`
 
 Bug Fixes (v0.12.1):
@@ -152,20 +150,19 @@ Key directories:
 - `src/services/` - API and WebSocket clients
 
 ### Backend Key Files
-- `main.go` - HTTP server, routes, middleware, initializes ClaudeExecutor based on config
+- `main.go` - HTTP server, routes, middleware, initializes ProxyClaudeExecutor
 - `handlers/websocket.go` - WebSocket upgrade and message routing
 - `handlers/chat.go` - Message processing, coordinates Claude service and session management, memory injection
 - `handlers/upload.go` - File upload endpoint, serves uploaded files, validates MIME types
 - `handlers/memory.go` - Memory CRUD API endpoints
-- `services/claude_executor.go` - Interface definition for Claude execution
-- `services/claude.go` - Local executor (direct CLI execution), memory formatting
-- `services/proxy_claude_executor.go` - Proxy executor (remote execution via WebSocket)
+- `services/claude_executor.go` - Interface definition, shared types (ClaudeResponse, MemoryEntry), system prompt
+- `services/proxy_claude_executor.go` - Proxy executor (remote execution via WebSocket to Claude Proxy)
 - `services/session.go` - Session CRUD, maps internal session IDs to Claude CLI session IDs
 - `models/database.go` - SQLite schema with migrations, memory table and CRUD
 
 ### ClaudeExecutor Interface
 
-The `ClaudeExecutor` interface abstracts Claude CLI execution:
+The `ClaudeExecutor` interface abstracts Claude CLI execution via the proxy:
 
 ```go
 type ClaudeExecutor interface {
@@ -175,9 +172,7 @@ type ClaudeExecutor interface {
 }
 ```
 
-Two implementations:
-- `LocalClaudeExecutor` - Spawns Claude CLI process directly
-- `ProxyClaudeExecutor` - Connects to Claude Proxy via WebSocket
+Implementation: `ProxyClaudeExecutor` - Connects to Claude Proxy via WebSocket
 
 ### Key Data Flow
 1. User sends message via WebSocket (`type: "message"`)
@@ -248,19 +243,15 @@ PORT=8080                       # Backend port
 DATABASE_PATH=./data/homeagent.db
 PUBLIC_DIR=./public             # Built frontend directory
 
+# Claude Proxy connection (required)
+CLAUDE_PROXY_URL=http://192.168.1.100:9090  # Proxy service URL
+CLAUDE_PROXY_KEY=your-api-key               # Proxy authentication (optional)
+
 # Workspace path (required for containerized deployment with file uploads)
 WORKSPACE_PATH=/home/user/workspace  # Host path where /workspace is mounted
                                      # Container stores in /workspace/uploads
                                      # Claude CLI accesses via WORKSPACE_PATH/uploads
                                      # If not set, uses ./data/uploads (local dev)
-
-# Local mode (direct CLI execution)
-CLAUDE_BIN=claude               # Path to Claude CLI binary
-ANTHROPIC_API_KEY=sk-ant-...   # Required for Claude CLI
-
-# Proxy mode (remote execution)
-CLAUDE_PROXY_URL=http://192.168.1.100:9090  # Proxy service URL
-CLAUDE_PROXY_KEY=your-api-key               # Proxy authentication
 ```
 
 ### Claude Proxy Service

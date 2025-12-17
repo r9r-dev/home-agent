@@ -22,11 +22,10 @@ import (
 type Config struct {
 	Port           string
 	DatabasePath   string
-	ClaudeBin      string
 	PublicDir      string
 	UploadDir      string // Directory for uploaded files (derived from WorkspacePath)
 	WorkspacePath  string // Path prefix for Claude CLI (e.g., /home/user/workspace)
-	ClaudeProxyURL string // If set, use proxy instead of local CLI
+	ClaudeProxyURL string // URL to Claude Proxy service (required)
 	ClaudeProxyKey string // API key for proxy authentication
 }
 
@@ -60,7 +59,6 @@ func loadConfig() Config {
 	config := Config{
 		Port:           getEnv("PORT", "8080"),
 		DatabasePath:   getEnv("DATABASE_PATH", "./data/homeagent.db"),
-		ClaudeBin:      getEnv("CLAUDE_BIN", "claude"),
 		PublicDir:      getEnv("PUBLIC_DIR", "./public"),
 		UploadDir:      uploadDir,
 		WorkspacePath:  workspacePath,
@@ -76,14 +74,13 @@ func loadConfig() Config {
 	if config.WorkspacePath != "" {
 		log.Printf("  Workspace path (for Claude): %s", config.WorkspacePath)
 	}
-
 	if config.ClaudeProxyURL != "" {
-		log.Printf("  Claude mode: proxy (%s)", config.ClaudeProxyURL)
+		log.Printf("  Claude Proxy URL: %s", config.ClaudeProxyURL)
 		if config.ClaudeProxyKey != "" {
-			log.Println("  Claude proxy key: configured")
+			log.Println("  Claude Proxy key: configured")
 		}
 	} else {
-		log.Printf("  Claude mode: local (%s)", config.ClaudeBin)
+		log.Println("  WARNING: CLAUDE_PROXY_URL not set!")
 	}
 
 	return config
@@ -141,31 +138,23 @@ func main() {
 	// Initialize services
 	sessionManager := services.NewSessionManager(db)
 
-	// Initialize Claude executor based on configuration
-	var claudeExecutor services.ClaudeExecutor
-
-	if config.ClaudeProxyURL != "" {
-		// Use proxy executor for remote Claude CLI execution
-		log.Printf("Initializing proxy Claude executor: %s", config.ClaudeProxyURL)
-		claudeExecutor = services.NewProxyClaudeExecutor(services.ProxyConfig{
-			ProxyURL: config.ClaudeProxyURL,
-			APIKey:   config.ClaudeProxyKey,
-			Timeout:  10 * time.Minute,
-		})
-	} else {
-		// Use local executor for direct Claude CLI execution
-		log.Printf("Initializing local Claude executor: %s", config.ClaudeBin)
-		claudeExecutor = services.NewLocalClaudeExecutor(config.ClaudeBin)
+	// Validate required configuration
+	if config.ClaudeProxyURL == "" {
+		log.Fatal("CLAUDE_PROXY_URL environment variable is required")
 	}
 
-	// Test Claude connection
+	// Initialize Claude executor (proxy mode only)
+	log.Printf("Initializing Claude proxy executor: %s", config.ClaudeProxyURL)
+	claudeExecutor := services.NewProxyClaudeExecutor(services.ProxyConfig{
+		ProxyURL: config.ClaudeProxyURL,
+		APIKey:   config.ClaudeProxyKey,
+		Timeout:  10 * time.Minute,
+	})
+
+	// Test Claude proxy connection
 	if err := claudeExecutor.TestConnection(); err != nil {
-		log.Printf("Warning: Claude executor test failed: %v", err)
-		if config.ClaudeProxyURL != "" {
-			log.Println("Make sure the Claude proxy service is running and accessible")
-		} else {
-			log.Println("Make sure the 'claude' CLI is installed and accessible")
-		}
+		log.Printf("Warning: Claude proxy connection test failed: %v", err)
+		log.Println("Make sure the Claude proxy service is running and accessible")
 	}
 
 	// Initialize handlers
