@@ -6,14 +6,15 @@
   import { onMount, onDestroy } from 'svelte';
   import { chatStore, type ClaudeModel, type MessageAttachment } from '../stores/chatStore';
   import { websocketService, type MessageAttachment as WsAttachment } from '../services/websocket';
-  import { fetchMessages, fetchSession, type Message as ApiMessage, type UploadedFile } from '../services/api';
+  import { fetchMessages, fetchSession, updateSessionModel, type Message as ApiMessage, type UploadedFile } from '../services/api';
   import MessageList from './MessageList.svelte';
   import InputBox from './InputBox.svelte';
   import Sidebar from './Sidebar.svelte';
-  import ModelSelector from './ModelSelector.svelte';
+  import SettingsDialog from './SettingsDialog.svelte';
+  import MemoryDialog from './MemoryDialog.svelte';
   import { Badge } from "$lib/components/ui/badge";
-  import { Button } from "$lib/components/ui/button";
   import * as Alert from "$lib/components/ui/alert";
+  import * as Menubar from "$lib/components/ui/menubar";
   import Icon from "@iconify/svelte";
 
   // App version (injected by Vite from package.json)
@@ -22,8 +23,33 @@
   // Sidebar reference for refreshing
   let sidebar: { refresh: () => void };
 
+  // Dialog states
+  let settingsDialogOpen = $state(false);
+  let memoryDialogOpen = $state(false);
+
+  // Model options
+  const models: { value: ClaudeModel; label: string }[] = [
+    { value: 'haiku', label: 'Haiku' },
+    { value: 'sonnet', label: 'Sonnet' },
+    { value: 'opus', label: 'Opus' },
+  ];
+
+  // Handle model change from menubar
+  async function handleModelChange(model: ClaudeModel) {
+    chatStore.setModel(model);
+    // Update in database if we have a session
+    const sessionId = $chatStore.currentSessionId;
+    if (sessionId) {
+      try {
+        await updateSessionModel(sessionId, model);
+      } catch (error) {
+        console.error('Failed to update session model:', error);
+      }
+    }
+  }
+
   // Subscribe to store
-  let state = $derived($chatStore);
+  let chatState = $derived($chatStore);
 
   // Cleanup functions
   let unsubscribeMessage: (() => void) | null = null;
@@ -104,7 +130,7 @@
    * Send a message
    */
   function handleSendMessage(content: string, attachments?: UploadedFile[]) {
-    if ((!content.trim() && (!attachments || attachments.length === 0)) || !state.isConnected) {
+    if ((!content.trim() && (!attachments || attachments.length === 0)) || !chatState.isConnected) {
       return;
     }
 
@@ -128,7 +154,7 @@
       }));
 
       chatStore.addMessage('user', content, storeAttachments);
-      websocketService.sendMessage(content, state.currentSessionId || undefined, state.selectedModel, wsAttachments);
+      websocketService.sendMessage(content, chatState.currentSessionId || undefined, chatState.selectedModel, wsAttachments);
       chatStore.setError(null);
     } catch (error) {
       console.error('[ChatWindow] Failed to send message:', error);
@@ -230,49 +256,94 @@
 <div class="flex h-screen overflow-hidden">
   <Sidebar
     bind:this={sidebar}
-    currentSessionId={state.currentSessionId}
+    currentSessionId={chatState.currentSessionId}
     onSelectSession={handleSelectSession}
     onNewConversation={handleNewConversation}
   />
 
   <div class="flex flex-col flex-1 min-w-0 min-h-0 bg-background">
     <header class="bg-background border-b border-border shrink-0">
-      <div class="flex justify-between items-center px-8 py-4 max-w-[1400px] mx-auto w-full">
-        <div class="text-xl font-medium tracking-tight">
-          <span class="text-foreground">hal</span><span class="text-muted-foreground">fred</span>
+      <div class="flex justify-between items-center px-8 py-3 max-w-[1400px] mx-auto w-full">
+        <div class="flex items-center gap-4">
+          <div class="text-xl font-medium tracking-tight">
+            <span class="text-foreground">hal</span><span class="text-muted-foreground">fred</span>
+          </div>
+
+          <Menubar.Root class="border-none shadow-none bg-transparent p-0">
+            <Menubar.Menu>
+              <Menubar.Trigger class="text-sm font-normal">
+                Menu
+                <Icon icon="mynaui:chevron-down" class="size-3 ml-1 opacity-60" />
+              </Menubar.Trigger>
+              <Menubar.Content>
+                <!-- Model Sub-menu -->
+                <Menubar.Sub>
+                  <Menubar.SubTrigger>
+                    <Icon icon="mynaui:cpu" class="size-4 mr-2" />
+                    Modele
+                    <span class="ml-auto text-xs text-muted-foreground capitalize">{chatState.selectedModel}</span>
+                  </Menubar.SubTrigger>
+                  <Menubar.SubContent>
+                    <Menubar.RadioGroup value={chatState.selectedModel}>
+                      {#each models as model}
+                        <Menubar.RadioItem
+                          value={model.value}
+                          onclick={() => handleModelChange(model.value)}
+                        >
+                          {model.label}
+                        </Menubar.RadioItem>
+                      {/each}
+                    </Menubar.RadioGroup>
+                  </Menubar.SubContent>
+                </Menubar.Sub>
+
+                <Menubar.Separator />
+
+                <!-- Memory -->
+                <Menubar.Item onclick={() => memoryDialogOpen = true}>
+                  <Icon icon="mynaui:brain" class="size-4 mr-2" />
+                  Memoire
+                </Menubar.Item>
+
+                <!-- Settings -->
+                <Menubar.Item onclick={() => settingsDialogOpen = true}>
+                  <Icon icon="mynaui:cog" class="size-4 mr-2" />
+                  Parametres
+                </Menubar.Item>
+              </Menubar.Content>
+            </Menubar.Menu>
+          </Menubar.Root>
         </div>
-        <nav class="flex items-center gap-8">
-          <Button variant="ghost" class="text-muted-foreground hover:text-foreground text-sm">
-            Machines
-          </Button>
-          <Button variant="ghost" class="text-muted-foreground hover:text-foreground text-sm">
-            Containers
-          </Button>
-          <ModelSelector />
-          <Badge
-            variant="outline"
-            class="gap-2 px-3 py-1.5 bg-black text-white border-black dark:bg-white dark:text-black dark:border-white"
-          >
-            <span class="w-1.5 h-1.5 rounded-full {connectionStatus.color === 'destructive' ? 'bg-red-500' : connectionStatus.color === 'default' ? 'bg-green-500' : 'bg-gray-400'}"></span>
-            {connectionStatus.text}
-          </Badge>
-        </nav>
+
+        <Badge
+          variant="outline"
+          class="gap-2 px-3 py-1.5 bg-black text-white border-black dark:bg-white dark:text-black dark:border-white"
+        >
+          <span class="w-1.5 h-1.5 rounded-full {connectionStatus.color === 'destructive' ? 'bg-red-500' : connectionStatus.color === 'default' ? 'bg-green-500' : 'bg-gray-400'}"></span>
+          {connectionStatus.text}
+        </Badge>
       </div>
     </header>
 
-    {#if state.error}
+    {#if chatState.error}
       <Alert.Root variant="destructive" class="rounded-none border-x-0 border-t-0">
         <Icon icon="mynaui:danger-circle" class="size-4" />
-        <Alert.Description>{state.error}</Alert.Description>
+        <Alert.Description>{chatState.error}</Alert.Description>
       </Alert.Root>
     {/if}
 
-    <MessageList messages={state.messages} isTyping={state.isTyping} />
+    <MessageList messages={chatState.messages} isTyping={chatState.isTyping} />
 
-    <InputBox bind:this={inputBox} onSend={handleSendMessage} disabled={!state.isConnected || state.isTyping} sessionId={state.currentSessionId} />
+    <InputBox bind:this={inputBox} onSend={handleSendMessage} disabled={!chatState.isConnected || chatState.isTyping} sessionId={chatState.currentSessionId} />
 
     <footer class="py-2 px-4 text-center text-[0.625rem] text-muted-foreground font-mono bg-background">
       v{APP_VERSION}
     </footer>
   </div>
 </div>
+
+<!-- Settings Dialog -->
+<SettingsDialog bind:open={settingsDialogOpen} />
+
+<!-- Memory Dialog -->
+<MemoryDialog bind:open={memoryDialogOpen} />

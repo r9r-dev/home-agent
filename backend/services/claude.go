@@ -89,6 +89,31 @@ func GetSystemPrompt() string {
 	return baseSystemPrompt
 }
 
+// MemoryEntry represents a memory item for prompt injection
+type MemoryEntry struct {
+	Title   string
+	Content string
+}
+
+// FormatMemoryEntries formats memory entries for injection into the prompt
+func FormatMemoryEntries(entries []MemoryEntry) string {
+	if len(entries) == 0 {
+		return ""
+	}
+
+	var builder strings.Builder
+	builder.WriteString("<user_memory>\n")
+	for _, entry := range entries {
+		builder.WriteString("- ")
+		builder.WriteString(entry.Title)
+		builder.WriteString(": ")
+		builder.WriteString(entry.Content)
+		builder.WriteString("\n")
+	}
+	builder.WriteString("</user_memory>")
+	return builder.String()
+}
+
 // buildSystemPrompt constructs the final system prompt with optional custom instructions
 func buildSystemPrompt(customInstructions string) string {
 	if customInstructions == "" {

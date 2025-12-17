@@ -103,6 +103,33 @@ Bug Fixes (v0.12.1):
 - Fixed: Settings button moved to bottom of sidebar with Separator
 - Added: WORKSPACE_PATH environment variable for Docker deployment path mapping
 
+Navigation & Memory Feature (v0.13.0):
+- **Menubar Component**: New navigation via Menubar (bits-ui) next to the halfred logo
+  - "Menu" dropdown with: Model selection (Haiku/Sonnet/Opus), Memory, Settings
+  - Model selector moved from header to Menubar submenu
+  - Connection badge remains on the right side of the header
+  - Settings accessible from both Menubar and Sidebar
+- **Memory Feature** (Issue #3): Persistent memory injected into every conversation
+  - CRUD interface for memory entries (title + content)
+  - Toggle individual entries on/off
+  - Import/export as JSON
+  - Memory preview showing formatted context
+  - Memory injected in `<user_memory>` tags before custom instructions
+- Key files:
+  - `frontend/src/lib/components/ui/menubar/` - Menubar component (new)
+  - `frontend/src/components/MemoryDialog.svelte` - Memory management UI
+  - `frontend/src/stores/memoryStore.ts` - Memory state management
+  - `backend/handlers/memory.go` - Memory REST API
+  - `backend/models/database.go` - Memory table and CRUD
+  - `backend/handlers/chat.go` - Memory injection into prompt
+- Endpoints:
+  - `GET /api/memory` - List all entries
+  - `POST /api/memory` - Create entry
+  - `PUT /api/memory/:id` - Update entry
+  - `DELETE /api/memory/:id` - Delete entry
+  - `GET /api/memory/export` - Export JSON
+  - `POST /api/memory/import` - Import JSON
+
 **Custom Component Modifications (re-apply after shadcn-svelte updates):**
 - `scroll-area.svelte`: Add `type = "always"` prop (default) for always-visible scrollbar
 - `scroll-area-scrollbar.svelte`: Custom classes for visible scrollbar:
@@ -118,13 +145,14 @@ Key directories:
 ### Backend Key Files
 - `main.go` - HTTP server, routes, middleware, initializes ClaudeExecutor based on config
 - `handlers/websocket.go` - WebSocket upgrade and message routing
-- `handlers/chat.go` - Message processing, coordinates Claude service and session management
+- `handlers/chat.go` - Message processing, coordinates Claude service and session management, memory injection
 - `handlers/upload.go` - File upload endpoint, serves uploaded files, validates MIME types
+- `handlers/memory.go` - Memory CRUD API endpoints
 - `services/claude_executor.go` - Interface definition for Claude execution
-- `services/claude.go` - Local executor (direct CLI execution)
+- `services/claude.go` - Local executor (direct CLI execution), memory formatting
 - `services/proxy_claude_executor.go` - Proxy executor (remote execution via WebSocket)
 - `services/session.go` - Session CRUD, maps internal session IDs to Claude CLI session IDs
-- `models/database.go` - SQLite schema with migrations
+- `models/database.go` - SQLite schema with migrations, memory table and CRUD
 
 ### ClaudeExecutor Interface
 
@@ -144,11 +172,14 @@ Two implementations:
 
 ### Key Data Flow
 1. User sends message via WebSocket (`type: "message"`)
-2. Backend creates/resumes session, calls ClaudeExecutor
-3. Executor streams responses back as `ClaudeResponse` events
-4. Backend forwards as `type: "chunk"` messages to frontend
-5. Backend saves messages to SQLite, generates summary title using Claude (haiku)
-6. Frontend accumulates chunks in store, updates UI reactively
+2. Backend creates/resumes session
+3. Backend retrieves enabled memory entries and custom instructions from database
+4. Backend combines memory + custom instructions into system prompt context
+5. Backend calls ClaudeExecutor with combined context
+6. Executor streams responses back as `ClaudeResponse` events
+7. Backend forwards as `type: "chunk"` messages to frontend
+8. Backend saves messages to SQLite, generates summary title using Claude (haiku)
+9. Frontend accumulates chunks in store, updates UI reactively
 
 ### Session Management
 - Internal `session_id` (UUID) used for database foreign keys and frontend routing
@@ -188,6 +219,13 @@ Attachments format:
 - `GET /api/settings` - Get all settings (key-value map)
 - `PUT /api/settings/:key` - Update a setting (body: `{"value": "..."}`)
 - `GET /api/system-prompt` - Get base system prompt for preview
+- `GET /api/memory` - List all memory entries
+- `POST /api/memory` - Create memory entry (body: `{"title": "...", "content": "..."}`)
+- `GET /api/memory/:id` - Get single memory entry
+- `PUT /api/memory/:id` - Update memory entry (body: `{"title": "...", "content": "...", "enabled": bool}`)
+- `DELETE /api/memory/:id` - Delete memory entry
+- `GET /api/memory/export` - Export all memory entries as JSON
+- `POST /api/memory/import` - Import memory entries (body: `{"entries": [...]}`))
 
 ## Environment Variables
 

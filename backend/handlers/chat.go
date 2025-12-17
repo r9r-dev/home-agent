@@ -130,7 +130,34 @@ func (ch *ChatHandler) HandleMessage(ctx context.Context, request MessageRequest
 		}
 	}
 
-	claudeResponseChan, err := ch.claudeExecutor.ExecuteClaude(ctx, prompt, claudeSessionID, model, customInstructions)
+	// Get enabled memory entries and format them
+	memoryContext := ""
+	if ch.db != nil {
+		if entries, err := ch.db.GetEnabledMemoryEntries(); err == nil && len(entries) > 0 {
+			// Convert to services.MemoryEntry format
+			memoryEntries := make([]services.MemoryEntry, len(entries))
+			for i, e := range entries {
+				memoryEntries[i] = services.MemoryEntry{
+					Title:   e.Title,
+					Content: e.Content,
+				}
+			}
+			memoryContext = services.FormatMemoryEntries(memoryEntries)
+			log.Printf("Injecting %d memory entries into prompt", len(entries))
+		}
+	}
+
+	// Combine memory and custom instructions
+	fullInstructions := customInstructions
+	if memoryContext != "" {
+		if fullInstructions != "" {
+			fullInstructions = memoryContext + "\n\n" + fullInstructions
+		} else {
+			fullInstructions = memoryContext
+		}
+	}
+
+	claudeResponseChan, err := ch.claudeExecutor.ExecuteClaude(ctx, prompt, claudeSessionID, model, fullInstructions)
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute claude: %w", err)
 	}

@@ -160,6 +160,7 @@ func main() {
 	chatHandler := handlers.NewChatHandler(sessionManager, claudeExecutor, config.UploadDir, config.WorkspacePath, db)
 	wsHandler := handlers.NewWebSocketHandler(chatHandler)
 	uploadHandler := handlers.NewUploadHandler(config.UploadDir)
+	memoryHandler := handlers.NewMemoryHandler(db)
 
 	// Create Fiber app
 	app := fiber.New(fiber.Config{
@@ -305,6 +306,9 @@ func main() {
 
 	// Register upload routes
 	uploadHandler.RegisterRoutes(app)
+
+	// Register memory routes
+	memoryHandler.RegisterRoutes(app)
 
 	// Serve static files from public directory (for frontend)
 	// This should be last so WebSocket and API routes take precedence

@@ -29,6 +29,16 @@ type Message struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
+// MemoryEntry represents a persistent memory item
+type MemoryEntry struct {
+	ID        string    `json:"id"`
+	Title     string    `json:"title"`
+	Content   string    `json:"content"`
+	Enabled   bool      `json:"enabled"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
 // DB wraps the SQLite database connection
 type DB struct {
 	conn *sql.DB
@@ -112,6 +122,17 @@ func (db *DB) createTables() error {
 	);
 	`
 
+	memoryTable := `
+	CREATE TABLE IF NOT EXISTS memory (
+		id TEXT PRIMARY KEY,
+		title TEXT NOT NULL,
+		content TEXT NOT NULL,
+		enabled INTEGER DEFAULT 1,
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+	);
+	`
+
 	// Execute table creation queries
 	if _, err := db.conn.Exec(sessionsTable); err != nil {
 		return fmt.Errorf("failed to create sessions table: %w", err)
@@ -123,6 +144,10 @@ func (db *DB) createTables() error {
 
 	if _, err := db.conn.Exec(settingsTable); err != nil {
 		return fmt.Errorf("failed to create settings table: %w", err)
+	}
+
+	if _, err := db.conn.Exec(memoryTable); err != nil {
+		return fmt.Errorf("failed to create memory table: %w", err)
 	}
 
 	// Run migrations (ignore errors if columns already exist)
@@ -496,6 +521,196 @@ func (db *DB) GetAllSettings() (map[string]string, error) {
 	}
 
 	return settings, nil
+}
+
+// CreateMemoryEntry creates a new memory entry
+func (db *DB) CreateMemoryEntry(id, title, content string) (*MemoryEntry, error) {
+	now := time.Now()
+
+	query := `
+	INSERT INTO memory (id, title, content, enabled, created_at, updated_at)
+	VALUES (?, ?, ?, 1, ?, ?)
+	`
+
+	_, err := db.conn.Exec(query, id, title, content, now, now)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create memory entry: %w", err)
+	}
+
+	log.Printf("Created memory entry: %s", id)
+
+	return &MemoryEntry{
+		ID:        id,
+		Title:     title,
+		Content:   content,
+		Enabled:   true,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}, nil
+}
+
+// GetMemoryEntry retrieves a memory entry by ID
+func (db *DB) GetMemoryEntry(id string) (*MemoryEntry, error) {
+	query := `
+	SELECT id, title, content, enabled, created_at, updated_at
+	FROM memory
+	WHERE id = ?
+	`
+
+	var entry MemoryEntry
+	var enabled int
+	err := db.conn.QueryRow(query, id).Scan(
+		&entry.ID,
+		&entry.Title,
+		&entry.Content,
+		&enabled,
+		&entry.CreatedAt,
+		&entry.UpdatedAt,
+	)
+
+	if err == sql.ErrNoRows {
+		return nil, nil // Entry not found
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to get memory entry: %w", err)
+	}
+
+	entry.Enabled = enabled == 1
+	return &entry, nil
+}
+
+// UpdateMemoryEntry updates an existing memory entry
+func (db *DB) UpdateMemoryEntry(id, title, content string, enabled bool) error {
+	now := time.Now()
+	enabledInt := 0
+	if enabled {
+		enabledInt = 1
+	}
+
+	query := `
+	UPDATE memory
+	SET title = ?, content = ?, enabled = ?, updated_at = ?
+	WHERE id = ?
+	`
+
+	result, err := db.conn.Exec(query, title, content, enabledInt, now, id)
+	if err != nil {
+		return fmt.Errorf("failed to update memory entry: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return fmt.Errorf("memory entry not found: %s", id)
+	}
+
+	log.Printf("Updated memory entry: %s", id)
+	return nil
+}
+
+// DeleteMemoryEntry deletes a memory entry
+func (db *DB) DeleteMemoryEntry(id string) error {
+	result, err := db.conn.Exec("DELETE FROM memory WHERE id = ?", id)
+	if err != nil {
+		return fmt.Errorf("failed to delete memory entry: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return fmt.Errorf("memory entry not found: %s", id)
+	}
+
+	log.Printf("Deleted memory entry: %s", id)
+	return nil
+}
+
+// ListMemoryEntries retrieves all memory entries
+func (db *DB) ListMemoryEntries() ([]*MemoryEntry, error) {
+	query := `
+	SELECT id, title, content, enabled, created_at, updated_at
+	FROM memory
+	ORDER BY created_at DESC
+	`
+
+	rows, err := db.conn.Query(query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list memory entries: %w", err)
+	}
+	defer rows.Close()
+
+	var entries []*MemoryEntry
+	for rows.Next() {
+		var entry MemoryEntry
+		var enabled int
+		err := rows.Scan(
+			&entry.ID,
+			&entry.Title,
+			&entry.Content,
+			&enabled,
+			&entry.CreatedAt,
+			&entry.UpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan memory entry: %w", err)
+		}
+		entry.Enabled = enabled == 1
+		entries = append(entries, &entry)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating memory entries: %w", err)
+	}
+
+	return entries, nil
+}
+
+// GetEnabledMemoryEntries retrieves only enabled memory entries
+func (db *DB) GetEnabledMemoryEntries() ([]*MemoryEntry, error) {
+	query := `
+	SELECT id, title, content, enabled, created_at, updated_at
+	FROM memory
+	WHERE enabled = 1
+	ORDER BY created_at ASC
+	`
+
+	rows, err := db.conn.Query(query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get enabled memory entries: %w", err)
+	}
+	defer rows.Close()
+
+	var entries []*MemoryEntry
+	for rows.Next() {
+		var entry MemoryEntry
+		var enabled int
+		err := rows.Scan(
+			&entry.ID,
+			&entry.Title,
+			&entry.Content,
+			&enabled,
+			&entry.CreatedAt,
+			&entry.UpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan memory entry: %w", err)
+		}
+		entry.Enabled = enabled == 1
+		entries = append(entries, &entry)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating memory entries: %w", err)
+	}
+
+	return entries, nil
 }
 
 // Close closes the database connection
