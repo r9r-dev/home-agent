@@ -3,7 +3,10 @@ package handlers
 import (
 	"context"
 	"fmt"
+	"io"
 	"log"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/ronan/home-agent/services"
@@ -11,16 +14,18 @@ import (
 
 // ChatHandler handles chat message processing and coordination
 type ChatHandler struct {
-	sessionManager  *services.SessionManager
-	claudeExecutor  services.ClaudeExecutor
+	sessionManager *services.SessionManager
+	claudeExecutor services.ClaudeExecutor
+	uploadDir      string
 }
 
 // NewChatHandler creates a new ChatHandler instance
-func NewChatHandler(sessionManager *services.SessionManager, claudeExecutor services.ClaudeExecutor) *ChatHandler {
+func NewChatHandler(sessionManager *services.SessionManager, claudeExecutor services.ClaudeExecutor, uploadDir string) *ChatHandler {
 	log.Println("Initializing ChatHandler")
 	return &ChatHandler{
-		sessionManager:  sessionManager,
-		claudeExecutor:  claudeExecutor,
+		sessionManager: sessionManager,
+		claudeExecutor: claudeExecutor,
+		uploadDir:      uploadDir,
 	}
 }
 
@@ -261,7 +266,7 @@ func (ch *ChatHandler) ValidateSession(sessionID string) error {
 	return nil
 }
 
-// buildPromptWithAttachments builds a prompt that includes attachment information for Claude
+// buildPromptWithAttachments builds a prompt that includes attachment content for Claude
 func (ch *ChatHandler) buildPromptWithAttachments(content string, attachments []MessageAttachment) string {
 	if len(attachments) == 0 {
 		return content
@@ -269,12 +274,33 @@ func (ch *ChatHandler) buildPromptWithAttachments(content string, attachments []
 
 	var sb strings.Builder
 
-	// Add attachment information
-	sb.WriteString("[Attached files:\n")
+	// Process each attachment
 	for _, att := range attachments {
-		sb.WriteString(fmt.Sprintf("- %s (%s)\n", att.Filename, att.Type))
+		physicalPath := ch.getPhysicalPath(att.Path)
+		if physicalPath == "" {
+			log.Printf("Warning: could not resolve physical path for %s", att.Path)
+			continue
+		}
+
+		if att.Type == "image" {
+			// For images, provide the absolute path for Claude to read
+			absPath, err := filepath.Abs(physicalPath)
+			if err != nil {
+				log.Printf("Warning: could not get absolute path for %s: %v", physicalPath, err)
+				continue
+			}
+			sb.WriteString(fmt.Sprintf("[Image: %s]\nPlease read and analyze this image file: %s\n\n", att.Filename, absPath))
+		} else {
+			// For text files, read and include the content directly
+			fileContent, err := ch.readFileContent(physicalPath)
+			if err != nil {
+				log.Printf("Warning: could not read file %s: %v", physicalPath, err)
+				sb.WriteString(fmt.Sprintf("[File: %s - Error reading content]\n\n", att.Filename))
+				continue
+			}
+			sb.WriteString(fmt.Sprintf("[File: %s]\n```\n%s\n```\n\n", att.Filename, fileContent))
+		}
 	}
-	sb.WriteString("]\n\n")
 
 	// Add the user's message
 	if content != "" {
@@ -284,6 +310,47 @@ func (ch *ChatHandler) buildPromptWithAttachments(content string, attachments []
 	}
 
 	return sb.String()
+}
+
+// getPhysicalPath converts an API path to a physical file path
+// API path format: /api/uploads/{session_id}/{filename}
+func (ch *ChatHandler) getPhysicalPath(apiPath string) string {
+	// Remove /api/uploads/ prefix
+	prefix := "/api/uploads/"
+	if !strings.HasPrefix(apiPath, prefix) {
+		return ""
+	}
+
+	relativePath := strings.TrimPrefix(apiPath, prefix)
+	return filepath.Join(ch.uploadDir, relativePath)
+}
+
+// readFileContent reads the content of a text file
+func (ch *ChatHandler) readFileContent(filePath string) (string, error) {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
+
+	// Limit reading to 100KB to avoid huge prompts
+	const maxSize = 100 * 1024
+	limitedReader := io.LimitReader(file, maxSize)
+
+	content, err := io.ReadAll(limitedReader)
+	if err != nil {
+		return "", err
+	}
+
+	result := string(content)
+
+	// Check if file was truncated
+	stat, err := file.Stat()
+	if err == nil && stat.Size() > maxSize {
+		result += "\n... [file truncated, showing first 100KB]"
+	}
+
+	return result, nil
 }
 
 // buildDisplayContentWithAttachments builds content for display that shows attachment info

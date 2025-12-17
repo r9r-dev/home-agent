@@ -139,7 +139,7 @@ func main() {
 	}
 
 	// Initialize handlers
-	chatHandler := handlers.NewChatHandler(sessionManager, claudeExecutor)
+	chatHandler := handlers.NewChatHandler(sessionManager, claudeExecutor, config.UploadDir)
 	wsHandler := handlers.NewWebSocketHandler(chatHandler)
 	uploadHandler := handlers.NewUploadHandler(config.UploadDir)
 
