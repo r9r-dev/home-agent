@@ -307,10 +307,11 @@ func (cs *ClaudeService) GenerateTitleSummary(userMessage, assistantResponse str
 		assistantResponse = assistantResponse[:500]
 	}
 
-	prompt := "Generate a very short title (max 40 characters) that summarizes this conversation. " +
-		"Respond with ONLY the title, no quotes, no explanation.\n\n" +
-		"User: " + userMessage + "\n\n" +
-		"Assistant: " + assistantResponse
+	prompt := "Tu dois generer un titre EN FRANCAIS, tres court (maximum 40 caracteres) qui resume cette conversation. " +
+		"IMPORTANT: Le titre doit etre en francais. " +
+		"Reponds UNIQUEMENT avec le titre, sans guillemets, sans ponctuation finale, sans explication.\n\n" +
+		"Message de l'utilisateur: " + userMessage + "\n\n" +
+		"Reponse de l'assistant: " + assistantResponse
 
 	cmd := exec.CommandContext(ctx, cs.claudeBin,
 		"-p", prompt,
