@@ -132,8 +132,9 @@ func (sm *SessionManager) GetOrCreateSession(sessionID string) (string, bool, er
 }
 
 // GetOrCreateSessionWithModel gets an existing session or creates a new one with specified model
+// If sessionID is provided but doesn't exist, creates a new session with that ID
 func (sm *SessionManager) GetOrCreateSessionWithModel(sessionID string, model string) (string, bool, error) {
-	// If no session ID provided, create a new one
+	// If no session ID provided, create a new one with generated UUID
 	if sessionID == "" {
 		newSessionID, err := sm.CreateSessionWithModel(model)
 		if err != nil {
@@ -144,11 +145,18 @@ func (sm *SessionManager) GetOrCreateSessionWithModel(sessionID string, model st
 
 	// Check if session exists
 	exists := sm.SessionExists(sessionID)
-	if !exists {
-		return "", false, fmt.Errorf("session does not exist: %s", sessionID)
+	if exists {
+		return sessionID, false, nil
 	}
 
-	return sessionID, false, nil
+	// Session doesn't exist, create it with the provided ID
+	session, err := sm.db.CreateSessionWithModel(sessionID, model)
+	if err != nil {
+		return "", false, fmt.Errorf("failed to create session with ID %s: %w", sessionID, err)
+	}
+
+	log.Printf("SessionManager: Created new session %s with model %s", session.SessionID, model)
+	return session.SessionID, true, nil
 }
 
 // ListSessions returns all sessions ordered by last activity
