@@ -264,17 +264,15 @@
   <div class="flex flex-col flex-1 min-w-0 min-h-0 bg-background">
     <header class="bg-background border-b border-border shrink-0">
       <div class="flex justify-between items-center px-8 py-3 max-w-[1400px] mx-auto w-full">
-        <div class="flex items-center gap-4">
-          <div class="text-xl font-medium tracking-tight">
-            <span class="text-foreground">hal</span><span class="text-muted-foreground">fred</span>
-          </div>
+        <div class="text-xl font-medium tracking-tight">
+          <span class="text-foreground">hal</span><span class="text-muted-foreground">fred</span>
+        </div>
 
-          <Menubar.Root class="border-none shadow-none bg-transparent p-0">
+        <div class="flex items-center gap-4">
+          <Menubar.Root>
+            <!-- Claude Menu -->
             <Menubar.Menu>
-              <Menubar.Trigger class="text-sm font-normal">
-                Menu
-                <Icon icon="mynaui:chevron-down" class="size-3 ml-1 opacity-60" />
-              </Menubar.Trigger>
+              <Menubar.Trigger class="text-sm font-normal">Claude</Menubar.Trigger>
               <Menubar.Content>
                 <!-- Model Sub-menu -->
                 <Menubar.Sub>
@@ -297,31 +295,48 @@
                   </Menubar.SubContent>
                 </Menubar.Sub>
 
+                <!-- Mode Thinking (disabled) -->
+                <Menubar.CheckboxItem checked={false} disabled>
+                  Mode Thinking
+                </Menubar.CheckboxItem>
+
                 <Menubar.Separator />
 
                 <!-- Memory -->
                 <Menubar.Item onclick={() => memoryDialogOpen = true}>
                   <Icon icon="mynaui:brain" class="size-4 mr-2" />
-                  Memoire
-                </Menubar.Item>
-
-                <!-- Settings -->
-                <Menubar.Item onclick={() => settingsDialogOpen = true}>
-                  <Icon icon="mynaui:cog" class="size-4 mr-2" />
-                  Parametres
+                  Gestion memoire
                 </Menubar.Item>
               </Menubar.Content>
             </Menubar.Menu>
-          </Menubar.Root>
-        </div>
 
-        <Badge
-          variant="outline"
-          class="gap-2 px-3 py-1.5 bg-black text-white border-black dark:bg-white dark:text-black dark:border-white"
-        >
-          <span class="w-1.5 h-1.5 rounded-full {connectionStatus.color === 'destructive' ? 'bg-red-500' : connectionStatus.color === 'default' ? 'bg-green-500' : 'bg-gray-400'}"></span>
-          {connectionStatus.text}
-        </Badge>
+            <!-- Host Menu -->
+            <Menubar.Menu>
+              <Menubar.Trigger class="text-sm font-normal">Host</Menubar.Trigger>
+              <Menubar.Content>
+                <Menubar.Item disabled>
+                  <Icon icon="mynaui:download" class="size-4 mr-2" />
+                  Mettre a jour Claude Code
+                </Menubar.Item>
+              </Menubar.Content>
+            </Menubar.Menu>
+
+            <!-- Parametres Menu -->
+            <Menubar.Menu>
+              <Menubar.Trigger class="text-sm font-normal" onclick={() => settingsDialogOpen = true}>
+                Parametres
+              </Menubar.Trigger>
+            </Menubar.Menu>
+          </Menubar.Root>
+
+          <Badge
+            variant="outline"
+            class="gap-2 px-3 py-1.5 bg-black text-white border-black"
+          >
+            <span class="w-1.5 h-1.5 rounded-full {connectionStatus.color === 'destructive' ? 'bg-red-500' : connectionStatus.color === 'default' ? 'bg-green-500' : 'bg-gray-400'}"></span>
+            {connectionStatus.text}
+          </Badge>
+        </div>
       </div>
     </header>
 

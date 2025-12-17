@@ -21,22 +21,6 @@
   let loading = $state(true);
   let isCollapsed = $derived($sidebarStore);
 
-  // Placeholder sessions for UI testing (remove in production)
-  const placeholderSessions: Session[] = [
-    { id: 1, session_id: 'placeholder-1', title: 'Discussion sur le projet React', model: 'sonnet', created_at: new Date().toISOString(), last_activity: new Date().toISOString() },
-    { id: 2, session_id: 'placeholder-2', title: 'Aide avec TypeScript', model: 'sonnet', created_at: new Date(Date.now() - 3600000).toISOString(), last_activity: new Date(Date.now() - 3600000).toISOString() },
-    { id: 3, session_id: 'placeholder-3', title: 'Configuration Docker', model: 'sonnet', created_at: new Date(Date.now() - 86400000).toISOString(), last_activity: new Date(Date.now() - 86400000).toISOString() },
-    { id: 4, session_id: 'placeholder-4', title: 'Optimisation des performances', model: 'sonnet', created_at: new Date(Date.now() - 172800000).toISOString(), last_activity: new Date(Date.now() - 172800000).toISOString() },
-    { id: 5, session_id: 'placeholder-5', title: 'Integration API REST', model: 'sonnet', created_at: new Date(Date.now() - 259200000).toISOString(), last_activity: new Date(Date.now() - 259200000).toISOString() },
-    { id: 6, session_id: 'placeholder-6', title: 'Tests unitaires Jest', model: 'sonnet', created_at: new Date(Date.now() - 345600000).toISOString(), last_activity: new Date(Date.now() - 345600000).toISOString() },
-    { id: 7, session_id: 'placeholder-7', title: 'Deploiement sur Vercel', model: 'sonnet', created_at: new Date(Date.now() - 432000000).toISOString(), last_activity: new Date(Date.now() - 432000000).toISOString() },
-    { id: 8, session_id: 'placeholder-8', title: 'Migration base de donnees', model: 'sonnet', created_at: new Date(Date.now() - 518400000).toISOString(), last_activity: new Date(Date.now() - 518400000).toISOString() },
-    { id: 9, session_id: 'placeholder-9', title: 'Authentification OAuth', model: 'sonnet', created_at: new Date(Date.now() - 604800000).toISOString(), last_activity: new Date(Date.now() - 604800000).toISOString() },
-    { id: 10, session_id: 'placeholder-10', title: 'Refactoring du code legacy', model: 'sonnet', created_at: new Date(Date.now() - 691200000).toISOString(), last_activity: new Date(Date.now() - 691200000).toISOString() },
-    { id: 11, session_id: 'placeholder-11', title: 'Configuration Tailwind CSS', model: 'sonnet', created_at: new Date(Date.now() - 777600000).toISOString(), last_activity: new Date(Date.now() - 777600000).toISOString() },
-    { id: 12, session_id: 'placeholder-12', title: 'Debug production issue', model: 'sonnet', created_at: new Date(Date.now() - 864000000).toISOString(), last_activity: new Date(Date.now() - 864000000).toISOString() },
-  ];
-
   // Delete confirmation dialog state
   let deleteDialogOpen = $state(false);
   let sessionToDelete = $state<string | null>(null);
@@ -46,13 +30,10 @@
 
   async function loadSessions() {
     try {
-      const fetchedSessions = await fetchSessions();
-      // Use placeholder sessions if no real sessions exist (for UI testing)
-      sessions = fetchedSessions.length > 0 ? fetchedSessions : placeholderSessions;
+      sessions = await fetchSessions();
     } catch (error) {
       console.error('Failed to load sessions:', error);
-      // Use placeholder sessions on error (for UI testing)
-      sessions = placeholderSessions;
+      sessions = [];
     } finally {
       loading = false;
     }

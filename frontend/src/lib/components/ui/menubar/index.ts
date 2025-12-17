@@ -3,6 +3,7 @@ import Menu from "./menubar-menu.svelte";
 import Trigger from "./menubar-trigger.svelte";
 import Content from "./menubar-content.svelte";
 import Item from "./menubar-item.svelte";
+import CheckboxItem from "./menubar-checkbox-item.svelte";
 import Separator from "./menubar-separator.svelte";
 import Label from "./menubar-label.svelte";
 import Sub from "./menubar-sub.svelte";
@@ -17,6 +18,7 @@ export {
 	Trigger,
 	Content,
 	Item,
+	CheckboxItem,
 	Separator,
 	Label,
 	Sub,
@@ -30,6 +32,7 @@ export {
 	Trigger as MenubarTrigger,
 	Content as MenubarContent,
 	Item as MenubarItem,
+	CheckboxItem as MenubarCheckboxItem,
 	Separator as MenubarSeparator,
 	Label as MenubarLabel,
 	Sub as MenubarSub,
