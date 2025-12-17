@@ -146,7 +146,7 @@ export class WebSocketService {
   /**
    * Send a message to the server
    */
-  sendMessage(content: string, sessionId?: string, model?: string, attachments?: MessageAttachment[]): void {
+  sendMessage(content: string, sessionId?: string, model?: string, attachments?: MessageAttachment[], thinking?: boolean): void {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       console.error('[WebSocket] Cannot send message: not connected');
       throw new Error('WebSocket is not connected');
@@ -158,6 +158,7 @@ export class WebSocketService {
       sessionId?: string;
       model?: string;
       attachments?: MessageAttachment[];
+      thinking?: boolean;
     } = {
       type: 'message',
       content,
@@ -175,8 +176,12 @@ export class WebSocketService {
       message.attachments = attachments;
     }
 
+    if (thinking) {
+      message.thinking = thinking;
+    }
+
     this.ws.send(JSON.stringify(message));
-    console.log('[WebSocket] Message sent (sessionId:', sessionId || 'none', ', model:', model || 'default', ', attachments:', attachments?.length || 0, ')');
+    console.log('[WebSocket] Message sent (sessionId:', sessionId || 'none', ', model:', model || 'default', ', attachments:', attachments?.length || 0, ', thinking:', thinking || false, ')');
   }
 
   /**

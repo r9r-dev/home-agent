@@ -39,11 +39,12 @@ type ClientMessage struct {
 	SessionID   string       `json:"sessionId,omitempty"`   // Optional session ID
 	Model       string       `json:"model,omitempty"`       // Claude model: haiku, sonnet, opus
 	Attachments []Attachment `json:"attachments,omitempty"` // File attachments
+	Thinking    bool         `json:"thinking,omitempty"`    // Enable extended thinking mode
 }
 
 // ServerMessage represents a message sent to the WebSocket client
 type ServerMessage struct {
-	Type      string `json:"type"`                // "chunk", "done", "error", "pong", "history", "session_id"
+	Type      string `json:"type"`                // "chunk", "thinking", "done", "error", "pong", "history", "session_id"
 	Content   string `json:"content,omitempty"`   // Message content
 	SessionID string `json:"sessionId,omitempty"` // Session ID
 	Error     string `json:"error,omitempty"`     // Error message
@@ -150,7 +151,7 @@ func (wsh *WebSocketHandler) HandleWebSocket(c *websocket.Conn) {
 
 // handleChatMessage processes a chat message from the client
 func (wsh *WebSocketHandler) handleChatMessage(c *websocket.Conn, clientMsg ClientMessage, clientAddr string) {
-	log.Printf("Processing chat message from %s (sessionID: %s, model: %s, attachments: %d)", clientAddr, clientMsg.SessionID, clientMsg.Model, len(clientMsg.Attachments))
+	log.Printf("Processing chat message from %s (sessionID: %s, model: %s, thinking: %v, attachments: %d)", clientAddr, clientMsg.SessionID, clientMsg.Model, clientMsg.Thinking, len(clientMsg.Attachments))
 
 	// Convert attachments
 	attachments := make([]MessageAttachment, len(clientMsg.Attachments))
@@ -170,6 +171,7 @@ func (wsh *WebSocketHandler) handleChatMessage(c *websocket.Conn, clientMsg Clie
 		SessionID:   clientMsg.SessionID,
 		Model:       clientMsg.Model,
 		Attachments: attachments,
+		Thinking:    clientMsg.Thinking,
 	}
 
 	// Create context with timeout
@@ -192,6 +194,12 @@ func (wsh *WebSocketHandler) handleChatMessage(c *websocket.Conn, clientMsg Clie
 		case "chunk":
 			serverMsg = ServerMessage{
 				Type:    "chunk",
+				Content: response.Content,
+			}
+
+		case "thinking":
+			serverMsg = ServerMessage{
+				Type:    "thinking",
 				Content: response.Content,
 			}
 

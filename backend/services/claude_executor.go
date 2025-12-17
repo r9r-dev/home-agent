@@ -7,7 +7,7 @@ import (
 
 // ClaudeResponse represents a chunk of text from Claude's response
 type ClaudeResponse struct {
-	Type      string // "chunk", "done", "error", "session_id"
+	Type      string // "chunk", "thinking", "done", "error", "session_id"
 	Content   string
 	SessionID string
 	Error     error
@@ -21,9 +21,10 @@ type ClaudeExecutor interface {
 	// isNewSession: If true, uses --session-id to start a new session; if false, uses --resume
 	// Model can be "haiku", "sonnet", or "opus" (defaults to "haiku" if empty).
 	// customInstructions are appended to the system prompt if provided.
+	// thinking: If true, enables extended thinking mode.
 	// Returns a channel that streams ClaudeResponse events.
 	// The channel will be closed when the execution completes.
-	ExecuteClaude(ctx context.Context, prompt string, sessionID string, isNewSession bool, model string, customInstructions string) (<-chan ClaudeResponse, error)
+	ExecuteClaude(ctx context.Context, prompt string, sessionID string, isNewSession bool, model string, customInstructions string, thinking bool) (<-chan ClaudeResponse, error)
 
 	// GenerateTitleSummary generates a short title for a conversation.
 	// Uses a fast model (haiku) for quick generation.

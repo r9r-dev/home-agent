@@ -4,7 +4,7 @@
 
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
-  import { chatStore, type ClaudeModel, type MessageAttachment } from '../stores/chatStore';
+  import { chatStore, currentThinking, thinkingEnabled, type ClaudeModel, type MessageAttachment } from '../stores/chatStore';
   import { websocketService, type MessageAttachment as WsAttachment } from '../services/websocket';
   import { fetchMessages, fetchSession, updateSessionModel, type Message as ApiMessage, type UploadedFile } from '../services/api';
   import MessageList from './MessageList.svelte';
@@ -69,8 +69,14 @@
         chatStore.appendToLastMessage(data.content);
         break;
 
+      case 'thinking':
+        chatStore.setTyping(true);
+        chatStore.appendToThinking(data.content);
+        break;
+
       case 'done':
         chatStore.setTyping(false);
+        // Keep thinking content visible after response completes
         if (data.sessionId) {
           chatStore.setSessionId(data.sessionId);
         }
@@ -153,8 +159,11 @@
         mime_type: a.mime_type,
       }));
 
+      // Clear previous thinking content before new message
+      chatStore.clearThinking();
+
       chatStore.addMessage('user', content, storeAttachments);
-      websocketService.sendMessage(content, chatState.currentSessionId || undefined, chatState.selectedModel, wsAttachments);
+      websocketService.sendMessage(content, chatState.currentSessionId || undefined, chatState.selectedModel, wsAttachments, chatState.thinkingEnabled);
       chatStore.setError(null);
     } catch (error) {
       console.error('[ChatWindow] Failed to send message:', error);
@@ -295,10 +304,23 @@
                   </Menubar.SubContent>
                 </Menubar.Sub>
 
-                <!-- Mode Thinking (disabled) -->
-                <Menubar.CheckboxItem checked={false} disabled>
-                  Mode Thinking
-                </Menubar.CheckboxItem>
+                <!-- Mode Thinking (styled as toggle) -->
+                <Menubar.Item
+                  onSelect={(e) => {
+                    e.preventDefault();
+                    chatStore.setThinkingEnabled(!chatState.thinkingEnabled);
+                  }}
+                  class="flex items-center justify-between"
+                >
+                  <span>Mode Thinking</span>
+                  <span
+                    class="ml-4 relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full transition-colors {chatState.thinkingEnabled ? 'bg-primary' : 'bg-muted'}"
+                  >
+                    <span
+                      class="pointer-events-none block h-4 w-4 rounded-full bg-white shadow-sm ring-0 transition-transform mt-0.5 {chatState.thinkingEnabled ? 'translate-x-4 ml-0.5' : 'translate-x-0.5'}"
+                    ></span>
+                  </span>
+                </Menubar.Item>
 
                 <Menubar.Separator />
 

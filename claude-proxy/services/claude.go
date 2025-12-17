@@ -37,7 +37,7 @@ type ClaudeContentBlock struct {
 
 // ClaudeResponse represents a chunk of text from Claude's response
 type ClaudeResponse struct {
-	Type      string // "chunk", "done", "error", "session_id"
+	Type      string // "chunk", "thinking", "done", "error", "session_id"
 	Content   string
 	SessionID string
 	Error     error
@@ -88,13 +88,14 @@ Respond in the same language as the user.`
 // isNewSession: If true, uses --session-id to start a new session; if false, uses --resume
 // model: Claude model (haiku, sonnet, opus) - defaults to sonnet if empty
 // customInstructions: Optional custom instructions to append to system prompt
-func (cs *ClaudeService) ExecuteClaude(ctx context.Context, prompt string, sessionID string, isNewSession bool, model string, customInstructions string) (<-chan ClaudeResponse, error) {
+// thinking: If true, enables extended thinking mode with --thinking flag
+func (cs *ClaudeService) ExecuteClaude(ctx context.Context, prompt string, sessionID string, isNewSession bool, model string, customInstructions string, thinking bool) (<-chan ClaudeResponse, error) {
 	// Default to sonnet if model not specified
 	if model == "" {
 		model = "sonnet"
 	}
 
-	log.Printf("Executing Claude with prompt (length: %d), sessionID: %s, isNewSession: %v, model: %s", len(prompt), sessionID, isNewSession, model)
+	log.Printf("Executing Claude with prompt (length: %d), sessionID: %s, isNewSession: %v, model: %s, thinking: %v", len(prompt), sessionID, isNewSession, model, thinking)
 
 	ctx, cancel := context.WithTimeout(ctx, cs.timeout)
 
@@ -111,6 +112,12 @@ func (cs *ClaudeService) ExecuteClaude(ctx context.Context, prompt string, sessi
 		"--model", model,
 		"--system-prompt", finalSystemPrompt,
 		"--dangerously-skip-permissions",
+	}
+
+	// Add thinking mode if enabled
+	if thinking {
+		args = append(args, "--thinking")
+		log.Println("Thinking mode enabled")
 	}
 
 	// Add session management flag based on whether this is a new or existing session
@@ -260,11 +267,20 @@ func (cs *ClaudeService) processStream(ctx context.Context, cancel context.Cance
 			log.Println("Stream: content_block_start")
 
 		case "content_block_delta":
-			if event.Delta != nil && event.Delta.Type == "text_delta" && event.Delta.Text != "" {
-				fullResponse.WriteString(event.Delta.Text)
-				responseChan <- ClaudeResponse{
-					Type:    "chunk",
-					Content: event.Delta.Text,
+			if event.Delta != nil && event.Delta.Text != "" {
+				if event.Delta.Type == "thinking_delta" {
+					// Thinking content - send as separate type
+					responseChan <- ClaudeResponse{
+						Type:    "thinking",
+						Content: event.Delta.Text,
+					}
+				} else if event.Delta.Type == "text_delta" {
+					// Regular text content
+					fullResponse.WriteString(event.Delta.Text)
+					responseChan <- ClaudeResponse{
+						Type:    "chunk",
+						Content: event.Delta.Text,
+					}
 				}
 			}
 

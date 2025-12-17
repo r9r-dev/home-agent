@@ -49,11 +49,12 @@ type MessageRequest struct {
 	SessionID   string              `json:"session_id,omitempty"`
 	Model       string              `json:"model,omitempty"` // Claude model: haiku, sonnet, opus
 	Attachments []MessageAttachment `json:"attachments,omitempty"`
+	Thinking    bool                `json:"thinking,omitempty"` // Enable extended thinking mode
 }
 
 // MessageResponse represents a response chunk sent to the client
 type MessageResponse struct {
-	Type      string `json:"type"`       // "chunk", "done", "error", "session_id"
+	Type      string `json:"type"`       // "chunk", "thinking", "done", "error", "session_id"
 	Content   string `json:"content,omitempty"`
 	SessionID string `json:"session_id,omitempty"`
 	Error     string `json:"error,omitempty"`
@@ -68,7 +69,7 @@ func (ch *ChatHandler) HandleMessage(ctx context.Context, request MessageRequest
 		model = "haiku"
 	}
 
-	log.Printf("HandleMessage: received message (length: %d), sessionID: %s, model: %s, attachments: %d", len(request.Content), request.SessionID, model, len(request.Attachments))
+	log.Printf("HandleMessage: received message (length: %d), sessionID: %s, model: %s, thinking: %v, attachments: %d", len(request.Content), request.SessionID, model, request.Thinking, len(request.Attachments))
 
 	// Validate input - allow empty content if attachments are present
 	if strings.TrimSpace(request.Content) == "" && len(request.Attachments) == 0 {
@@ -144,7 +145,7 @@ func (ch *ChatHandler) HandleMessage(ctx context.Context, request MessageRequest
 
 	// Execute Claude with our session ID
 	// isNew determines whether to use --session-id (new) or --resume (existing)
-	claudeResponseChan, err := ch.claudeExecutor.ExecuteClaude(ctx, prompt, sessionID, isNew, model, fullInstructions)
+	claudeResponseChan, err := ch.claudeExecutor.ExecuteClaude(ctx, prompt, sessionID, isNew, model, fullInstructions, request.Thinking)
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute claude: %w", err)
 	}
@@ -173,6 +174,13 @@ func (ch *ChatHandler) processClaudeResponse(sessionID string, isNewSession bool
 			// Send chunk to client
 			responseChan <- MessageResponse{
 				Type:    "chunk",
+				Content: claudeResp.Content,
+			}
+
+		case "thinking":
+			// Send thinking content to client (not saved to DB)
+			responseChan <- MessageResponse{
+				Type:    "thinking",
 				Content: claudeResp.Content,
 			}
 

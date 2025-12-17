@@ -31,6 +31,8 @@ export interface ChatState {
   isTyping: boolean;
   error: string | null;
   responseCompleted: boolean; // Track if last response was completed (for paragraph separation)
+  thinkingEnabled: boolean; // Extended thinking mode enabled
+  currentThinking: string | null; // Current thinking content being streamed
 }
 
 // Generate initial sessionId for first conversation
@@ -44,6 +46,8 @@ const initialState: ChatState = {
   isTyping: false,
   error: null,
   responseCompleted: false,
+  thinkingEnabled: false,
+  currentThinking: null,
 };
 
 /**
@@ -237,6 +241,36 @@ function createChatStore() {
     },
 
     /**
+     * Set thinking mode enabled/disabled
+     */
+    setThinkingEnabled: (enabled: boolean) => {
+      update((state) => ({
+        ...state,
+        thinkingEnabled: enabled,
+      }));
+    },
+
+    /**
+     * Append content to current thinking
+     */
+    appendToThinking: (chunk: string) => {
+      update((state) => ({
+        ...state,
+        currentThinking: (state.currentThinking || '') + chunk,
+      }));
+    },
+
+    /**
+     * Clear current thinking content
+     */
+    clearThinking: () => {
+      update((state) => ({
+        ...state,
+        currentThinking: null,
+      }));
+    },
+
+    /**
      * Reset the entire store with a new sessionId
      */
     reset: () => {
@@ -256,3 +290,5 @@ export const isConnected = derived(chatStore, ($store) => $store.isConnected);
 export const isTyping = derived(chatStore, ($store) => $store.isTyping);
 export const error = derived(chatStore, ($store) => $store.error);
 export const selectedModel = derived(chatStore, ($store) => $store.selectedModel);
+export const thinkingEnabled = derived(chatStore, ($store) => $store.thinkingEnabled);
+export const currentThinking = derived(chatStore, ($store) => $store.currentThinking);

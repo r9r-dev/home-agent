@@ -3,8 +3,10 @@
   import { marked } from 'marked';
   import hljs from 'highlight.js';
   import type { Message, MessageAttachment } from '../stores/chatStore';
+  import { currentThinking } from '../stores/chatStore';
   import { ScrollArea } from "$lib/components/ui/scroll-area";
   import Icon from "@iconify/svelte";
+  import ThinkingBlock from './ThinkingBlock.svelte';
 
   interface Props {
     messages?: Message[];
@@ -167,6 +169,7 @@
     // Track dependencies
     messages;
     isTyping;
+    $currentThinking;
 
     // Run after render
     tick().then(() => {
@@ -265,6 +268,13 @@
           </span>
         </div>
       {/each}
+
+      <!-- Thinking Block (displayed while streaming and after response) -->
+      {#if $currentThinking}
+        <div class="self-start w-full max-w-[80%]">
+          <ThinkingBlock content={$currentThinking} isStreaming={isTyping} />
+        </div>
+      {/if}
 
       {#if isTyping}
         <div class="flex flex-col self-start items-start">

@@ -39,11 +39,12 @@ type ProxyRequest struct {
 	IsNewSession       bool   `json:"is_new_session,omitempty"`      // True for new session (--session-id), false for resume (--resume)
 	Model              string `json:"model,omitempty"`               // Claude model: haiku, sonnet, opus
 	CustomInstructions string `json:"custom_instructions,omitempty"` // Optional custom instructions for system prompt
+	Thinking           bool   `json:"thinking,omitempty"`            // Enable extended thinking mode
 }
 
 // ProxyResponse represents a response from the proxy
 type ProxyResponse struct {
-	Type      string `json:"type"`                 // "chunk", "done", "error", "session_id"
+	Type      string `json:"type"`                 // "chunk", "thinking", "done", "error", "session_id"
 	Content   string `json:"content,omitempty"`    // Response content
 	SessionID string `json:"session_id,omitempty"` // Session ID from Claude
 	Error     string `json:"error,omitempty"`      // Error message
@@ -97,13 +98,13 @@ func NewProxyClaudeExecutor(config ProxyConfig) *ProxyClaudeExecutor {
 }
 
 // ExecuteClaude connects to the proxy service and streams Claude's response
-func (pce *ProxyClaudeExecutor) ExecuteClaude(ctx context.Context, prompt string, sessionID string, isNewSession bool, model string, customInstructions string) (<-chan ClaudeResponse, error) {
+func (pce *ProxyClaudeExecutor) ExecuteClaude(ctx context.Context, prompt string, sessionID string, isNewSession bool, model string, customInstructions string, thinking bool) (<-chan ClaudeResponse, error) {
 	// Default to haiku if model not specified
 	if model == "" {
 		model = "haiku"
 	}
 
-	log.Printf("ProxyExecutor: Executing Claude via proxy, prompt length: %d, sessionID: %s, isNewSession: %v, model: %s, customInstructions: %d chars", len(prompt), sessionID, isNewSession, model, len(customInstructions))
+	log.Printf("ProxyExecutor: Executing Claude via proxy, prompt length: %d, sessionID: %s, isNewSession: %v, model: %s, customInstructions: %d chars, thinking: %v", len(prompt), sessionID, isNewSession, model, len(customInstructions), thinking)
 
 	responseChan := make(chan ClaudeResponse, 100)
 
@@ -134,6 +135,7 @@ func (pce *ProxyClaudeExecutor) ExecuteClaude(ctx context.Context, prompt string
 			IsNewSession:       isNewSession,
 			Model:              model,
 			CustomInstructions: customInstructions,
+			Thinking:           thinking,
 		}
 
 		if err := conn.WriteJSON(request); err != nil {
@@ -179,6 +181,12 @@ func (pce *ProxyClaudeExecutor) ExecuteClaude(ctx context.Context, prompt string
 			case "chunk":
 				responseChan <- ClaudeResponse{
 					Type:    "chunk",
+					Content: response.Content,
+				}
+
+			case "thinking":
+				responseChan <- ClaudeResponse{
+					Type:    "thinking",
 					Content: response.Content,
 				}
 
