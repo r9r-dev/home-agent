@@ -9,7 +9,7 @@ curl -fsSL https://raw.githubusercontent.com/r9r-dev/home-agent/main/claude-prox
 ```
 
 Le script:
-- Installe Node.js 22+ si necessaire
+- Installe Node.js 24+ si necessaire
 - Telecharge et compile le projet
 - Cree un service systemd
 - Genere une cle API
@@ -25,7 +25,7 @@ curl -fsSL https://raw.githubusercontent.com/r9r-dev/home-agent/main/claude-prox
 
 ### Prerequis
 
-- Node.js >= 22.0.0
+- Node.js >= 24.0.0
 - Claude Code CLI installe (`claude --version`)
 - Cle API Anthropic (`ANTHROPIC_API_KEY`)
 
@@ -61,7 +61,7 @@ npm start
 
 ## Prérequis
 
-- Node.js >= 22.0.0
+- Node.js >= 24.0.0
 - Claude Code CLI installé (`claude --version`)
 - Clé API Anthropic (`ANTHROPIC_API_KEY`)
 

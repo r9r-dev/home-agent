@@ -17,7 +17,7 @@ GITHUB_REPO="r9r-dev/home-agent"
 SERVICE_NAME="claude-proxy-sdk"
 INSTALL_DIR="/opt/claude-proxy-sdk"
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
-NODE_MIN_VERSION="22"
+NODE_MIN_VERSION="24"
 
 # Global variable to store the API key
 INSTALLED_API_KEY=""
