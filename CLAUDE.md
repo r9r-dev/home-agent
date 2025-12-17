@@ -76,6 +76,16 @@ UI Enhancements (v0.10.0+):
 - Cal Sans font for conversation titles (local woff2 in `/public/fonts/`)
 - v0.10.1: Lighter Cal Sans font weight (.font-cal class), improved scrollbar visibility, Dialog component for delete confirmation
 
+File Upload Feature (v0.11.0):
+- Upload images (PNG, JPG, GIF, WebP) and documents (PDF, TXT, MD, JSON, code files)
+- Drag & drop or paperclip button in InputBox
+- Files stored in `./data/uploads/{session_id}/`
+- Backend reads file content and includes it in Claude prompt:
+  - Text files: content embedded directly (max 100KB)
+  - Images: absolute path provided for Claude's Read tool
+- Preview attachments before sending, display in message history
+- Key files: `handlers/upload.go`, `InputBox.svelte`, `MessageList.svelte`, `services/api.ts`
+
 **Custom Component Modifications (re-apply after shadcn-svelte updates):**
 - `scroll-area.svelte`: Add `type = "always"` prop (default) for always-visible scrollbar
 - `scroll-area-scrollbar.svelte`: Custom classes for visible scrollbar:
@@ -92,6 +102,7 @@ Key directories:
 - `main.go` - HTTP server, routes, middleware, initializes ClaudeExecutor based on config
 - `handlers/websocket.go` - WebSocket upgrade and message routing
 - `handlers/chat.go` - Message processing, coordinates Claude service and session management
+- `handlers/upload.go` - File upload endpoint, serves uploaded files, validates MIME types
 - `services/claude_executor.go` - Interface definition for Claude execution
 - `services/claude.go` - Local executor (direct CLI execution)
 - `services/proxy_claude_executor.go` - Proxy executor (remote execution via WebSocket)
@@ -131,7 +142,12 @@ Two implementations:
 
 **Client -> Server:**
 ```json
-{"type": "message", "content": "...", "session_id": "optional-uuid"}
+{"type": "message", "content": "...", "session_id": "optional-uuid", "attachments": []}
+```
+
+Attachments format:
+```json
+{"id": "uuid", "filename": "file.png", "path": "/api/uploads/...", "type": "image|file", "mime_type": "..."}
 ```
 
 **Server -> Client:**
@@ -142,6 +158,17 @@ Two implementations:
 {"type": "error", "error": "..."}        // Error occurred
 ```
 
+## REST API Endpoints
+
+- `POST /api/upload` - Upload file (multipart form, returns `UploadedFile`)
+- `GET /api/uploads/:sessionId/:filename` - Serve uploaded file
+- `DELETE /api/uploads/:id?session_id=...` - Delete uploaded file
+- `GET /api/sessions` - List all sessions
+- `GET /api/sessions/:id` - Get session details
+- `GET /api/sessions/:id/messages` - Get session messages
+- `DELETE /api/sessions/:id` - Delete session
+- `PATCH /api/sessions/:id/model` - Update session model
+
 ## Environment Variables
 
 ### Backend (Home Agent)
@@ -149,6 +176,7 @@ Two implementations:
 PORT=8080                       # Backend port
 DATABASE_PATH=./data/homeagent.db
 PUBLIC_DIR=./public             # Built frontend directory
+UPLOAD_DIR=./data/uploads       # Directory for uploaded files
 
 # Local mode (direct CLI execution)
 CLAUDE_BIN=claude               # Path to Claude CLI binary
