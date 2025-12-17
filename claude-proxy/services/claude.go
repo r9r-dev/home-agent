@@ -114,10 +114,10 @@ func (cs *ClaudeService) ExecuteClaude(ctx context.Context, prompt string, sessi
 		"--dangerously-skip-permissions",
 	}
 
-	// Add thinking mode if enabled
+	// Enable extended thinking mode via settings flag if requested
 	if thinking {
-		args = append(args, "--thinking")
-		log.Println("Thinking mode enabled")
+		args = append(args, "--settings", `{"alwaysThinkingEnabled": true}`)
+		log.Printf("Extended thinking mode enabled")
 	}
 
 	// Add session management flag based on whether this is a new or existing session

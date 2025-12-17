@@ -84,8 +84,6 @@ func NewProxyClaudeExecutor(config ProxyConfig) *ProxyClaudeExecutor {
 		httpURL = "https://" + strings.TrimPrefix(httpURL, "wss://")
 	}
 
-	log.Printf("Initializing ProxyClaudeExecutor with URL: %s (HTTP: %s)", wsURL, httpURL)
-
 	return &ProxyClaudeExecutor{
 		proxyURL: wsURL,
 		httpURL:  httpURL,
@@ -103,8 +101,6 @@ func (pce *ProxyClaudeExecutor) ExecuteClaude(ctx context.Context, prompt string
 	if model == "" {
 		model = "haiku"
 	}
-
-	log.Printf("ProxyExecutor: Executing Claude via proxy, prompt length: %d, sessionID: %s, isNewSession: %v, model: %s, customInstructions: %d chars, thinking: %v", len(prompt), sessionID, isNewSession, model, len(customInstructions), thinking)
 
 	responseChan := make(chan ClaudeResponse, 100)
 
@@ -147,13 +143,10 @@ func (pce *ProxyClaudeExecutor) ExecuteClaude(ctx context.Context, prompt string
 			return
 		}
 
-		log.Println("ProxyExecutor: Request sent, waiting for responses...")
-
 		// Read responses
 		for {
 			select {
 			case <-ctx.Done():
-				log.Println("ProxyExecutor: Context cancelled")
 				responseChan <- ClaudeResponse{
 					Type:  "error",
 					Error: fmt.Errorf("request cancelled"),
@@ -165,10 +158,8 @@ func (pce *ProxyClaudeExecutor) ExecuteClaude(ctx context.Context, prompt string
 			var response ProxyResponse
 			if err := conn.ReadJSON(&response); err != nil {
 				if websocket.IsCloseError(err, websocket.CloseNormalClosure) {
-					log.Println("ProxyExecutor: Connection closed normally")
 					return
 				}
-				log.Printf("ProxyExecutor: Failed to read response: %v", err)
 				responseChan <- ClaudeResponse{
 					Type:  "error",
 					Error: fmt.Errorf("failed to read response: %w", err),
@@ -205,15 +196,11 @@ func (pce *ProxyClaudeExecutor) ExecuteClaude(ctx context.Context, prompt string
 				return
 
 			case "error":
-				log.Printf("ProxyExecutor: Received error from proxy: %s", response.Error)
 				responseChan <- ClaudeResponse{
 					Type:  "error",
 					Error: fmt.Errorf("proxy error: %s", response.Error),
 				}
 				return
-
-			default:
-				log.Printf("ProxyExecutor: Unknown response type: %s", response.Type)
 			}
 		}
 	}()
@@ -228,12 +215,10 @@ func (pce *ProxyClaudeExecutor) connectWithRetry(ctx context.Context, maxAttempt
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
 		conn, err := pce.dial(ctx)
 		if err == nil {
-			log.Printf("ProxyExecutor: Connected to proxy on attempt %d", attempt)
 			return conn, nil
 		}
 
 		lastErr = err
-		log.Printf("ProxyExecutor: Connection attempt %d failed: %v", attempt, err)
 
 		if attempt < maxAttempts {
 			// Exponential backoff
@@ -350,6 +335,5 @@ func (pce *ProxyClaudeExecutor) TestConnection() error {
 		return fmt.Errorf("proxy health check failed with status %d", resp.StatusCode)
 	}
 
-	log.Printf("ProxyExecutor: Connection test successful to %s", pce.httpURL)
 	return nil
 }

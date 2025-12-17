@@ -66,23 +66,6 @@ func loadConfig() Config {
 		ClaudeProxyKey: getEnv("CLAUDE_PROXY_KEY", ""),
 	}
 
-	log.Println("Configuration loaded:")
-	log.Printf("  Port: %s", config.Port)
-	log.Printf("  Database: %s", config.DatabasePath)
-	log.Printf("  Public directory: %s", config.PublicDir)
-	log.Printf("  Upload directory: %s", config.UploadDir)
-	if config.WorkspacePath != "" {
-		log.Printf("  Workspace path (for Claude): %s", config.WorkspacePath)
-	}
-	if config.ClaudeProxyURL != "" {
-		log.Printf("  Claude Proxy URL: %s", config.ClaudeProxyURL)
-		if config.ClaudeProxyKey != "" {
-			log.Println("  Claude Proxy key: configured")
-		}
-	} else {
-		log.Println("  WARNING: CLAUDE_PROXY_URL not set!")
-	}
-
 	return config
 }
 
@@ -102,19 +85,17 @@ func ensureDirectories(config Config) error {
 	if err := os.MkdirAll(dbDir, 0755); err != nil {
 		return fmt.Errorf("failed to create database directory: %w", err)
 	}
-	log.Printf("Database directory ensured: %s", dbDir)
 
 	// Ensure upload directory exists
 	if err := os.MkdirAll(config.UploadDir, 0755); err != nil {
 		return fmt.Errorf("failed to create upload directory: %w", err)
 	}
-	log.Printf("Upload directory ensured: %s", config.UploadDir)
 
 	return nil
 }
 
 func main() {
-	log.Println("Starting Home Agent backend...")
+	log.Println("Starting Home Agent...")
 
 	// Load configuration
 	config := loadConfig()
@@ -144,7 +125,6 @@ func main() {
 	}
 
 	// Initialize Claude executor (proxy mode only)
-	log.Printf("Initializing Claude proxy executor: %s", config.ClaudeProxyURL)
 	claudeExecutor := services.NewProxyClaudeExecutor(services.ProxyConfig{
 		ProxyURL: config.ClaudeProxyURL,
 		APIKey:   config.ClaudeProxyKey,
@@ -153,8 +133,7 @@ func main() {
 
 	// Test Claude proxy connection
 	if err := claudeExecutor.TestConnection(); err != nil {
-		log.Printf("Warning: Claude proxy connection test failed: %v", err)
-		log.Println("Make sure the Claude proxy service is running and accessible")
+		log.Printf("Warning: Claude proxy not reachable: %v", err)
 	}
 
 	// Initialize handlers
@@ -166,8 +145,8 @@ func main() {
 	// Create Fiber app
 	app := fiber.New(fiber.Config{
 		AppName:               "Home Agent",
-		DisableStartupMessage: false,
-		EnablePrintRoutes:     true,
+		DisableStartupMessage: true,
+		EnablePrintRoutes:     false,
 		ServerHeader:          "Home Agent",
 		ErrorHandler:          customErrorHandler,
 	})
@@ -314,16 +293,12 @@ func main() {
 	// Serve static files from public directory (for frontend)
 	// This should be last so WebSocket and API routes take precedence
 	if _, err := os.Stat(config.PublicDir); err == nil {
-		log.Printf("Serving static files from: %s", config.PublicDir)
 		app.Static("/", config.PublicDir)
 
 		// Serve index.html for SPA routing
 		app.Get("/*", func(c *fiber.Ctx) error {
 			return c.SendFile(filepath.Join(config.PublicDir, "index.html"))
 		})
-	} else {
-		log.Printf("Warning: Public directory not found: %s", config.PublicDir)
-		log.Println("Static file serving disabled")
 	}
 
 	// Graceful shutdown
@@ -338,14 +313,11 @@ func main() {
 
 	// Start server
 	addr := fmt.Sprintf(":%s", config.Port)
-	log.Printf("Server starting on http://localhost%s", addr)
-	log.Println("WebSocket endpoint: ws://localhost" + addr + "/ws")
+	log.Printf("Listening on http://localhost%s", addr)
 
 	if err := app.Listen(addr); err != nil {
 		log.Fatalf("Failed to start server: %v", err)
 	}
-
-	log.Println("Server stopped")
 }
 
 // customErrorHandler handles Fiber errors

@@ -3,7 +3,6 @@ package handlers
 import (
 	"context"
 	"encoding/json"
-	"log"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -17,7 +16,6 @@ type WebSocketHandler struct {
 
 // NewWebSocketHandler creates a new WebSocketHandler instance
 func NewWebSocketHandler(chatHandler *ChatHandler) *WebSocketHandler {
-	log.Println("Initializing WebSocketHandler")
 	return &WebSocketHandler{
 		chatHandler: chatHandler,
 	}
@@ -66,7 +64,6 @@ func (wsh *WebSocketHandler) UpgradeMiddleware() fiber.Handler {
 // HandleWebSocket handles WebSocket connections
 func (wsh *WebSocketHandler) HandleWebSocket(c *websocket.Conn) {
 	clientAddr := c.RemoteAddr().String()
-	log.Printf("WebSocket connection established from %s", clientAddr)
 
 	// Set up connection parameters
 	c.SetReadDeadline(time.Now().Add(60 * time.Second))
@@ -88,7 +85,6 @@ func (wsh *WebSocketHandler) HandleWebSocket(c *websocket.Conn) {
 			select {
 			case <-ticker.C:
 				if err := c.WriteControl(websocket.PingMessage, []byte{}, time.Now().Add(10*time.Second)); err != nil {
-					log.Printf("WebSocket ping error for %s: %v", clientAddr, err)
 					return
 				}
 			case <-done:
@@ -102,17 +98,11 @@ func (wsh *WebSocketHandler) HandleWebSocket(c *websocket.Conn) {
 		// Read message from client
 		messageType, messageData, err := c.ReadMessage()
 		if err != nil {
-			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-				log.Printf("WebSocket error for %s: %v", clientAddr, err)
-			} else {
-				log.Printf("WebSocket closed normally for %s", clientAddr)
-			}
 			break
 		}
 
 		// Only handle text messages
 		if messageType != websocket.TextMessage {
-			log.Printf("Received non-text message from %s, ignoring", clientAddr)
 			continue
 		}
 
@@ -122,7 +112,6 @@ func (wsh *WebSocketHandler) HandleWebSocket(c *websocket.Conn) {
 		// Parse client message
 		var clientMsg ClientMessage
 		if err := json.Unmarshal(messageData, &clientMsg); err != nil {
-			log.Printf("Failed to parse client message from %s: %v", clientAddr, err)
 			wsh.sendError(c, "Invalid JSON format")
 			continue
 		}
@@ -139,20 +128,16 @@ func (wsh *WebSocketHandler) HandleWebSocket(c *websocket.Conn) {
 			wsh.handleHistory(c, clientMsg, clientAddr)
 
 		default:
-			log.Printf("Unknown message type from %s: %s", clientAddr, clientMsg.Type)
 			wsh.sendError(c, "Unknown message type: "+clientMsg.Type)
 		}
 	}
 
 	// Clean up
 	close(done)
-	log.Printf("WebSocket connection closed for %s", clientAddr)
 }
 
 // handleChatMessage processes a chat message from the client
 func (wsh *WebSocketHandler) handleChatMessage(c *websocket.Conn, clientMsg ClientMessage, clientAddr string) {
-	log.Printf("Processing chat message from %s (sessionID: %s, model: %s, thinking: %v, attachments: %d)", clientAddr, clientMsg.SessionID, clientMsg.Model, clientMsg.Thinking, len(clientMsg.Attachments))
-
 	// Convert attachments
 	attachments := make([]MessageAttachment, len(clientMsg.Attachments))
 	for i, a := range clientMsg.Attachments {
@@ -181,7 +166,6 @@ func (wsh *WebSocketHandler) handleChatMessage(c *websocket.Conn, clientMsg Clie
 	// Handle the message
 	responseChan, err := wsh.chatHandler.HandleMessage(ctx, request)
 	if err != nil {
-		log.Printf("Failed to handle message from %s: %v", clientAddr, err)
 		wsh.sendError(c, err.Error())
 		return
 	}
@@ -225,7 +209,6 @@ func (wsh *WebSocketHandler) handleChatMessage(c *websocket.Conn, clientMsg Clie
 
 		// Send to client
 		if err := wsh.sendMessage(c, serverMsg); err != nil {
-			log.Printf("Failed to send message to %s: %v", clientAddr, err)
 			return
 		}
 	}
@@ -233,8 +216,6 @@ func (wsh *WebSocketHandler) handleChatMessage(c *websocket.Conn, clientMsg Clie
 
 // handleHistory retrieves and sends conversation history
 func (wsh *WebSocketHandler) handleHistory(c *websocket.Conn, clientMsg ClientMessage, clientAddr string) {
-	log.Printf("Retrieving history for session %s from %s", clientMsg.SessionID, clientAddr)
-
 	if clientMsg.SessionID == "" {
 		wsh.sendError(c, "Session ID is required for history")
 		return
@@ -243,7 +224,6 @@ func (wsh *WebSocketHandler) handleHistory(c *websocket.Conn, clientMsg ClientMe
 	// Get history
 	messages, err := wsh.chatHandler.GetHistory(clientMsg.SessionID)
 	if err != nil {
-		log.Printf("Failed to get history for %s: %v", clientAddr, err)
 		wsh.sendError(c, err.Error())
 		return
 	}
@@ -254,9 +234,7 @@ func (wsh *WebSocketHandler) handleHistory(c *websocket.Conn, clientMsg ClientMe
 		Messages: messages,
 	}
 
-	if err := wsh.sendMessage(c, serverMsg); err != nil {
-		log.Printf("Failed to send history to %s: %v", clientAddr, err)
-	}
+	wsh.sendMessage(c, serverMsg)
 }
 
 // sendMessage sends a message to the WebSocket client
@@ -293,6 +271,4 @@ func (wsh *WebSocketHandler) RegisterRoutes(app *fiber.App) {
 
 	// WebSocket handler
 	app.Get("/ws", websocket.New(wsh.HandleWebSocket))
-
-	log.Println("WebSocket routes registered at /ws")
 }

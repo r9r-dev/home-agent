@@ -4,9 +4,9 @@
 
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
-  import { chatStore, currentThinking, thinkingEnabled, type ClaudeModel, type MessageAttachment } from '../stores/chatStore';
+  import { chatStore, currentThinking, type ClaudeModel, type MessageAttachment } from '../stores/chatStore';
   import { websocketService, type MessageAttachment as WsAttachment } from '../services/websocket';
-  import { fetchMessages, fetchSession, updateSessionModel, type Message as ApiMessage, type UploadedFile } from '../services/api';
+  import { fetchMessages, fetchSession, updateSessionModel, fetchSettings, updateSetting, type Message as ApiMessage, type UploadedFile } from '../services/api';
   import MessageList from './MessageList.svelte';
   import InputBox from './InputBox.svelte';
   import Sidebar from './Sidebar.svelte';
@@ -45,6 +45,29 @@
       } catch (error) {
         console.error('Failed to update session model:', error);
       }
+    }
+  }
+
+  // Handle thinking mode toggle
+  async function handleThinkingToggle() {
+    const newValue = !chatState.thinkingEnabled;
+    chatStore.setThinkingEnabled(newValue);
+    try {
+      await updateSetting('thinking_enabled', newValue ? 'true' : 'false');
+    } catch (error) {
+      console.error('Failed to save thinking setting:', error);
+    }
+  }
+
+  // Load thinking setting on mount
+  async function loadThinkingSetting() {
+    try {
+      const settings = await fetchSettings();
+      if (settings.thinking_enabled === 'true') {
+        chatStore.setThinkingEnabled(true);
+      }
+    } catch (error) {
+      console.error('Failed to load thinking setting:', error);
     }
   }
 
@@ -239,6 +262,9 @@
   onMount(() => {
     console.log('[ChatWindow] Mounting component');
 
+    // Load saved settings
+    loadThinkingSetting();
+
     unsubscribeMessage = websocketService.onMessage(handleWebSocketMessage);
     unsubscribeOpen = websocketService.onOpen(handleWebSocketOpen);
     unsubscribeClose = websocketService.onClose(handleWebSocketClose);
@@ -308,7 +334,7 @@
                 <Menubar.Item
                   onSelect={(e) => {
                     e.preventDefault();
-                    chatStore.setThinkingEnabled(!chatState.thinkingEnabled);
+                    handleThinkingToggle();
                   }}
                   class="flex items-center justify-between"
                 >

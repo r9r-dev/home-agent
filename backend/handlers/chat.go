@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -24,7 +23,6 @@ type ChatHandler struct {
 
 // NewChatHandler creates a new ChatHandler instance
 func NewChatHandler(sessionManager *services.SessionManager, claudeExecutor services.ClaudeExecutor, uploadDir string, workspacePath string, db *models.DB) *ChatHandler {
-	log.Println("Initializing ChatHandler")
 	return &ChatHandler{
 		sessionManager: sessionManager,
 		claudeExecutor: claudeExecutor,
@@ -69,8 +67,6 @@ func (ch *ChatHandler) HandleMessage(ctx context.Context, request MessageRequest
 		model = "haiku"
 	}
 
-	log.Printf("HandleMessage: received message (length: %d), sessionID: %s, model: %s, thinking: %v, attachments: %d", len(request.Content), request.SessionID, model, request.Thinking, len(request.Attachments))
-
 	// Validate input - allow empty content if attachments are present
 	if strings.TrimSpace(request.Content) == "" && len(request.Attachments) == 0 {
 		return nil, fmt.Errorf("message content cannot be empty")
@@ -85,14 +81,9 @@ func (ch *ChatHandler) HandleMessage(ctx context.Context, request MessageRequest
 		return nil, fmt.Errorf("failed to get or create session: %w", err)
 	}
 
-	if isNew {
-		log.Printf("Created new session: %s with model: %s", sessionID, model)
-	} else {
-		log.Printf("Using existing session: %s", sessionID)
+	if !isNew {
 		// Update the model if the session already exists (user might have changed it)
-		if err := ch.sessionManager.UpdateSessionModel(sessionID, model); err != nil {
-			log.Printf("Warning: failed to update session model: %v", err)
-		}
+		ch.sessionManager.UpdateSessionModel(sessionID, model)
 	}
 
 	// Save user message to database (save original content, not the augmented prompt)
@@ -101,18 +92,13 @@ func (ch *ChatHandler) HandleMessage(ctx context.Context, request MessageRequest
 		// Include attachment info in saved message for display
 		userContent = ch.buildDisplayContentWithAttachments(request.Content, request.Attachments)
 	}
-	if err := ch.sessionManager.SaveMessage(sessionID, "user", userContent); err != nil {
-		log.Printf("Warning: failed to save user message: %v", err)
-		// Don't fail the request, just log the error
-	}
+	ch.sessionManager.SaveMessage(sessionID, "user", userContent)
 
 	// Get custom instructions from settings
 	customInstructions := ""
 	if ch.db != nil {
 		if instructions, err := ch.db.GetSetting("custom_instructions"); err == nil {
 			customInstructions = instructions
-		} else {
-			log.Printf("Warning: failed to get custom instructions: %v", err)
 		}
 	}
 
@@ -120,7 +106,6 @@ func (ch *ChatHandler) HandleMessage(ctx context.Context, request MessageRequest
 	memoryContext := ""
 	if ch.db != nil {
 		if entries, err := ch.db.GetEnabledMemoryEntries(); err == nil && len(entries) > 0 {
-			// Convert to services.MemoryEntry format
 			memoryEntries := make([]services.MemoryEntry, len(entries))
 			for i, e := range entries {
 				memoryEntries[i] = services.MemoryEntry{
@@ -129,7 +114,6 @@ func (ch *ChatHandler) HandleMessage(ctx context.Context, request MessageRequest
 				}
 			}
 			memoryContext = services.FormatMemoryEntries(memoryEntries)
-			log.Printf("Injecting %d memory entries into prompt", len(entries))
 		}
 	}
 
@@ -185,22 +169,16 @@ func (ch *ChatHandler) processClaudeResponse(sessionID string, isNewSession bool
 			}
 
 		case "session_id":
-			// With --session-id, Claude uses our UUID, so just confirm to client
-			log.Printf("Session confirmed by Claude: %s", claudeResp.SessionID)
 			responseChan <- MessageResponse{
 				Type:      "session_id",
 				SessionID: sessionID,
 			}
 
 		case "done":
-			log.Println("Claude response complete")
-
 			// Save assistant's full response to database
 			assistantMessage := fullAssistantResponse.String()
 			if assistantMessage != "" {
-				if err := ch.sessionManager.SaveMessage(sessionID, "assistant", assistantMessage); err != nil {
-					log.Printf("Warning: failed to save assistant message: %v", err)
-				}
+				ch.sessionManager.SaveMessage(sessionID, "assistant", assistantMessage)
 			}
 
 			// Send done signal to client
@@ -215,23 +193,15 @@ func (ch *ChatHandler) processClaudeResponse(sessionID string, isNewSession bool
 				go func() {
 					title, err := ch.claudeExecutor.GenerateTitleSummary(userMessage, assistantMessage)
 					if err != nil {
-						log.Printf("Warning: failed to generate title summary: %v", err)
 						return
 					}
 					if title != "" {
-						if err := ch.sessionManager.UpdateSessionTitle(sessionID, title); err != nil {
-							log.Printf("Warning: failed to update session title: %v", err)
-						} else {
-							log.Printf("Updated session title to: %s", title)
-						}
+						ch.sessionManager.UpdateSessionTitle(sessionID, title)
 					}
 				}()
 			}
 
 		case "error":
-			log.Printf("Error from Claude: %v", claudeResp.Error)
-
-			// Send error to client
 			responseChan <- MessageResponse{
 				Type:  "error",
 				Error: claudeResp.Error.Error(),
@@ -296,19 +266,15 @@ func (ch *ChatHandler) buildPromptWithAttachments(content string, attachments []
 	for _, att := range attachments {
 		physicalPath := ch.getPhysicalPath(att.Path)
 		if physicalPath == "" {
-			log.Printf("Warning: could not resolve physical path for %s", att.Path)
 			continue
 		}
 
 		if att.Type == "image" {
-			// For images, provide the path for Claude to read
 			claudePath := ch.getClaudePath(physicalPath)
 			sb.WriteString(fmt.Sprintf("[Image: %s]\nPlease read and analyze this image file: %s\n\n", att.Filename, claudePath))
 		} else {
-			// For text files, read and include the content directly
 			fileContent, err := ch.readFileContent(physicalPath)
 			if err != nil {
-				log.Printf("Warning: could not read file %s: %v", physicalPath, err)
 				sb.WriteString(fmt.Sprintf("[File: %s - Error reading content]\n\n", att.Filename))
 				continue
 			}
@@ -332,26 +298,16 @@ func (ch *ChatHandler) buildPromptWithAttachments(content string, attachments []
 func (ch *ChatHandler) getClaudePath(localPath string) string {
 	if ch.workspacePath != "" {
 		// Container mode: map container path to host path for Claude CLI
-		// localPath: /workspace/uploads/session_id/uuid.ext
-		// uploadDir: /workspace/uploads
-		// relPath: session_id/uuid.ext
 		relPath, err := filepath.Rel(ch.uploadDir, localPath)
 		if err != nil {
-			log.Printf("Warning: could not get relative path for %s: %v", localPath, err)
 			return localPath
 		}
-		// Build the Claude path: WORKSPACE_PATH/uploads/relPath
-		// workspacePath: /home/user/workspace
-		// result: /home/user/workspace/uploads/session_id/uuid.ext
-		claudePath := filepath.Join(ch.workspacePath, "uploads", relPath)
-		log.Printf("Mapped container path %s to host path %s", localPath, claudePath)
-		return claudePath
+		return filepath.Join(ch.workspacePath, "uploads", relPath)
 	}
 
 	// Local dev mode: use absolute local path
 	absPath, err := filepath.Abs(localPath)
 	if err != nil {
-		log.Printf("Warning: could not get absolute path for %s: %v", localPath, err)
 		return localPath
 	}
 	return absPath

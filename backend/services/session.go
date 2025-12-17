@@ -18,7 +18,6 @@ type SessionManager struct {
 
 // NewSessionManager creates a new SessionManager instance
 func NewSessionManager(db *models.DB) *SessionManager {
-	log.Println("Initializing SessionManager")
 	return &SessionManager{
 		db: db,
 	}
