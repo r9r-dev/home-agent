@@ -52,8 +52,9 @@ RUN apk add --no-cache ca-certificates tzdata curl
 RUN adduser -D -H -u 1000 appuser
 
 # Create directories
-RUN mkdir -p /app /data && \
-    chown -R appuser:appuser /app /data
+# /workspace/uploads is for file uploads (mounted from host via WORKSPACE_PATH)
+RUN mkdir -p /app /data /workspace/uploads && \
+    chown -R appuser:appuser /app /data /workspace
 
 # Set working directory
 WORKDIR /app
@@ -76,9 +77,11 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
 
 # Set environment variables
 # CLAUDE_PROXY_URL must be set to point to the host's Claude proxy service
+# WORKSPACE_PATH must be set to the host workspace path (mounted as volume)
+# Files will be stored in WORKSPACE_PATH/uploads
 ENV PORT=8080 \
     HOST=0.0.0.0 \
-    DATABASE_PATH=/data/sessions.db \
+    DATABASE_PATH=/data/homeagent.db \
     CLAUDE_PROXY_URL= \
     CLAUDE_PROXY_KEY=
 

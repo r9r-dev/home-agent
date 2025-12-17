@@ -151,8 +151,9 @@ func (h *UploadHandler) HandleUpload(c *fiber.Ctx) error {
 	// Generate unique ID for the file
 	fileID := uuid.New().String()
 
-	// Create safe filename
-	safeFilename := fmt.Sprintf("%s-%s", fileID[:8], sanitizeFilename(file.Filename))
+	// Create filename using full GUID + extension (avoid collisions)
+	// ext was already computed above for validation
+	safeFilename := fmt.Sprintf("%s%s", fileID, ext)
 
 	// Create session upload directory
 	sessionDir := filepath.Join(h.uploadDir, sessionID)
@@ -227,7 +228,8 @@ func (h *UploadHandler) DeleteFile(c *fiber.Ctx) error {
 	}
 
 	for _, file := range files {
-		if strings.HasPrefix(file.Name(), fileID[:8]+"-") {
+		// Match files starting with the full UUID (format: uuid.ext)
+		if strings.HasPrefix(file.Name(), fileID) {
 			filePath := filepath.Join(sessionDir, file.Name())
 			if err := os.Remove(filePath); err != nil {
 				log.Printf("Failed to delete file: %v", err)

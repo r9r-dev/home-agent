@@ -24,33 +24,45 @@ type Config struct {
 	DatabasePath   string
 	ClaudeBin      string
 	PublicDir      string
-	UploadDir      string // Directory for uploaded files (local path)
-	WorkspacePath  string // Path prefix for Claude CLI (maps UploadDir for Claude's environment)
+	UploadDir      string // Directory for uploaded files (derived from WorkspacePath)
+	WorkspacePath  string // Path prefix for Claude CLI (e.g., /home/user/workspace)
 	ClaudeProxyURL string // If set, use proxy instead of local CLI
 	ClaudeProxyKey string // API key for proxy authentication
 }
 
 // loadConfig loads configuration from environment variables with defaults
 func loadConfig() Config {
-	uploadDir := getEnv("UPLOAD_DIR", "./data/uploads")
-	// Convert to absolute path for local file operations
-	absUploadDir, err := filepath.Abs(uploadDir)
-	if err != nil {
-		log.Printf("Warning: could not get absolute path for upload dir: %v", err)
-		absUploadDir = uploadDir
-	}
-
-	// WORKSPACE_PATH is the path prefix that Claude CLI sees
-	// Used when backend runs in container but Claude runs on host with mounted workspace
-	// If not set, defaults to the absolute upload dir
+	// WORKSPACE_PATH is the host path where /workspace is mounted
+	// - In container mode: set to host path (e.g., /home/user/workspace)
+	// - In local dev mode: leave empty
 	workspacePath := getEnv("WORKSPACE_PATH", "")
+
+	// Upload directory path
+	// Container mode: /workspace/uploads (fixed path, mounted from host)
+	// Local dev mode: ./data/uploads
+	var uploadDir string
+	if workspacePath != "" {
+		// Container mode: files stored in /workspace/uploads
+		// This maps to WORKSPACE_PATH/uploads on the host
+		uploadDir = "/workspace/uploads"
+	} else {
+		// Local dev mode
+		uploadDir = "./data/uploads"
+		// Convert to absolute path for local file operations
+		absUploadDir, err := filepath.Abs(uploadDir)
+		if err != nil {
+			log.Printf("Warning: could not get absolute path for upload dir: %v", err)
+		} else {
+			uploadDir = absUploadDir
+		}
+	}
 
 	config := Config{
 		Port:           getEnv("PORT", "8080"),
 		DatabasePath:   getEnv("DATABASE_PATH", "./data/homeagent.db"),
 		ClaudeBin:      getEnv("CLAUDE_BIN", "claude"),
 		PublicDir:      getEnv("PUBLIC_DIR", "./public"),
-		UploadDir:      absUploadDir,
+		UploadDir:      uploadDir,
 		WorkspacePath:  workspacePath,
 		ClaudeProxyURL: getEnv("CLAUDE_PROXY_URL", ""),
 		ClaudeProxyKey: getEnv("CLAUDE_PROXY_KEY", ""),

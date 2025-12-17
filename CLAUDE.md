@@ -76,13 +76,16 @@ UI Enhancements (v0.10.0+):
 - Cal Sans font for conversation titles (local woff2 in `/public/fonts/`)
 - v0.10.1: Lighter Cal Sans font weight (.font-cal class), improved scrollbar visibility, Dialog component for delete confirmation
 
-File Upload Feature (v0.11.0):
+File Upload Feature (v0.11.0, updated v0.14.0):
 - Upload images (PNG, JPG, GIF, WebP) and documents (PDF, TXT, MD, JSON, code files)
 - Drag & drop or paperclip button in InputBox
-- Files stored in `./data/uploads/{session_id}/`
+- Container mode: files stored in `/workspace/uploads/{session_id}/{uuid}.ext`
+  - `/workspace` mounted from host, mapped to `WORKSPACE_PATH` for Claude CLI
+- Local dev mode: `./data/uploads/{session_id}/{uuid}.ext`
+- GUID-based filenames prevent collisions
 - Backend reads file content and includes it in Claude prompt:
   - Text files: content embedded directly (max 100KB)
-  - Images: absolute path provided for Claude's Read tool
+  - Images: path mapped for Claude's Read tool
 - Preview attachments before sending, display in message history
 - Key files: `handlers/upload.go`, `InputBox.svelte`, `MessageList.svelte`, `services/api.ts`
 
@@ -234,12 +237,12 @@ Attachments format:
 PORT=8080                       # Backend port
 DATABASE_PATH=./data/homeagent.db
 PUBLIC_DIR=./public             # Built frontend directory
-UPLOAD_DIR=./data/uploads       # Directory for uploaded files
 
-# Workspace mapping (for containerized deployment)
-WORKSPACE_PATH=/home/user/workspace  # Root workspace path that Claude CLI sees
-                                     # Backend automatically adds "uploads" subfolder
-                                     # Use when backend runs in container but Claude on host
+# Workspace path (required for containerized deployment with file uploads)
+WORKSPACE_PATH=/home/user/workspace  # Host path where /workspace is mounted
+                                     # Container stores in /workspace/uploads
+                                     # Claude CLI accesses via WORKSPACE_PATH/uploads
+                                     # If not set, uses ./data/uploads (local dev)
 
 # Local mode (direct CLI execution)
 CLAUDE_BIN=claude               # Path to Claude CLI binary
@@ -267,17 +270,18 @@ The Docker image does NOT include Claude CLI. It requires connection to a Claude
    ```bash
    container run -d -p 8080:8080 \
      -v /home/user/workspace:/workspace \
+     -v /home/user/data:/app/data \
+     -e WORKSPACE_PATH=/home/user/workspace \
      -e CLAUDE_PROXY_URL=http://HOST_IP:9090 \
      -e CLAUDE_PROXY_KEY=your-key \
-     -e UPLOAD_DIR=/data/uploads \
-     -e WORKSPACE_PATH=/home/user/workspace \
      home-agent
    ```
 
-The `WORKSPACE_PATH` variable maps to the root workspace directory on the host:
-- Container stores files in `UPLOAD_DIR` (e.g., `/data/uploads/session_id/file.png`)
-- Backend extracts relative path and builds Claude path: `WORKSPACE_PATH/uploads/session_id/file.png`
-- Host's Claude CLI accesses files via the mounted volume
-- The "uploads" subfolder is added automatically, keeping workspace organized for future subfolders
+File upload path mapping (v0.14.0):
+- Container stores files in `/workspace/uploads/{session_id}/{uuid}.ext`
+- Volume mount: host `WORKSPACE_PATH` -> container `/workspace`
+- Backend maps paths for Claude: `/workspace/...` -> `WORKSPACE_PATH/...`
+- Host's Claude CLI accesses files at `WORKSPACE_PATH/uploads/...`
+- GUID-based filenames prevent collisions
 
 See `docs/claude-proxy.md` for detailed proxy setup.

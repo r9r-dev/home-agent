@@ -352,28 +352,28 @@ func (ch *ChatHandler) buildPromptWithAttachments(content string, attachments []
 }
 
 // getClaudePath returns the path that Claude CLI should use to access the file
-// If workspacePath is set, maps the local path to the workspace path
-// Otherwise returns the absolute local path
+// Container mode: maps /workspace/uploads/... to WORKSPACE_PATH/uploads/...
+// Local dev mode: returns absolute local path
 func (ch *ChatHandler) getClaudePath(localPath string) string {
 	if ch.workspacePath != "" {
-		// Extract the relative path from uploadDir
-		// localPath: /data/uploads/temp/xxx-file.png
-		// uploadDir: /data/uploads
-		// relPath: temp/xxx-file.png
+		// Container mode: map container path to host path for Claude CLI
+		// localPath: /workspace/uploads/session_id/uuid.ext
+		// uploadDir: /workspace/uploads
+		// relPath: session_id/uuid.ext
 		relPath, err := filepath.Rel(ch.uploadDir, localPath)
 		if err != nil {
 			log.Printf("Warning: could not get relative path for %s: %v", localPath, err)
 			return localPath
 		}
-		// Build the Claude path: workspacePath/uploads/relPath
+		// Build the Claude path: WORKSPACE_PATH/uploads/relPath
 		// workspacePath: /home/user/workspace
-		// result: /home/user/workspace/uploads/temp/xxx-file.png
+		// result: /home/user/workspace/uploads/session_id/uuid.ext
 		claudePath := filepath.Join(ch.workspacePath, "uploads", relPath)
-		log.Printf("Mapped local path %s to Claude path %s", localPath, claudePath)
+		log.Printf("Mapped container path %s to host path %s", localPath, claudePath)
 		return claudePath
 	}
 
-	// No workspace mapping, use absolute local path
+	// Local dev mode: use absolute local path
 	absPath, err := filepath.Abs(localPath)
 	if err != nil {
 		log.Printf("Warning: could not get absolute path for %s: %v", localPath, err)
