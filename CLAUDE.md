@@ -87,13 +87,21 @@ File Upload Feature (v0.11.0):
 - Key files: `handlers/upload.go`, `InputBox.svelte`, `MessageList.svelte`, `services/api.ts`
 
 Settings Feature (v0.12.0):
-- Configuration menu accessible via gear icon in sidebar
+- Configuration menu accessible via gear icon in sidebar (bottom section)
 - Centered modal dialog with two tabs: "Personnalisation" and "Apercu du prompt"
 - Custom instructions (max 2000 chars) appended to system prompt
 - Preview shows base system prompt + custom instructions
 - Settings persisted in SQLite `settings` table (key-value)
 - Key files: `SettingsDialog.svelte`, `settingsStore.ts`, `models/database.go`, `services/claude.go`
 - Endpoints: `GET /api/settings`, `PUT /api/settings/:key`, `GET /api/system-prompt`
+
+Bug Fixes (v0.12.1):
+- Fixed: Conversation titles now generated in French (reinforced prompt)
+- Fixed: Image uploads now accessible to Claude via WORKSPACE_PATH mapping
+- Fixed: Attachments parsed from `<!-- attachments:... -->` comments in message history
+- Fixed: Horizontal separator between consecutive assistant messages
+- Fixed: Settings button moved to bottom of sidebar with Separator
+- Added: WORKSPACE_PATH environment variable for Docker deployment path mapping
 
 **Custom Component Modifications (re-apply after shadcn-svelte updates):**
 - `scroll-area.svelte`: Add `type = "always"` prop (default) for always-visible scrollbar
@@ -191,8 +199,9 @@ PUBLIC_DIR=./public             # Built frontend directory
 UPLOAD_DIR=./data/uploads       # Directory for uploaded files
 
 # Workspace mapping (for containerized deployment)
-WORKSPACE_PATH=/workspace/uploads  # Path that Claude CLI sees (maps to UPLOAD_DIR)
-                                   # Use when backend runs in container but Claude on host
+WORKSPACE_PATH=/home/user/workspace  # Root workspace path that Claude CLI sees
+                                     # Backend automatically adds "uploads" subfolder
+                                     # Use when backend runs in container but Claude on host
 
 # Local mode (direct CLI execution)
 CLAUDE_BIN=claude               # Path to Claude CLI binary
@@ -219,17 +228,18 @@ The Docker image does NOT include Claude CLI. It requires connection to a Claude
 2. Run container with proxy URL and workspace mapping:
    ```bash
    container run -d -p 8080:8080 \
-     -v /path/on/host/workspace:/workspace \
+     -v /home/user/workspace:/workspace \
      -e CLAUDE_PROXY_URL=http://HOST_IP:9090 \
      -e CLAUDE_PROXY_KEY=your-key \
      -e UPLOAD_DIR=/data/uploads \
-     -e WORKSPACE_PATH=/path/on/host/workspace/uploads \
+     -e WORKSPACE_PATH=/home/user/workspace \
      home-agent
    ```
 
-The `WORKSPACE_PATH` variable maps the container's upload directory to the path Claude CLI sees on the host. This is necessary because:
-- Container stores files in `/data/uploads` (internal path)
-- Host's Claude CLI needs to access files via mounted volume path
-- `WORKSPACE_PATH` tells the backend what path to send to Claude
+The `WORKSPACE_PATH` variable maps to the root workspace directory on the host:
+- Container stores files in `UPLOAD_DIR` (e.g., `/data/uploads/session_id/file.png`)
+- Backend extracts relative path and builds Claude path: `WORKSPACE_PATH/uploads/session_id/file.png`
+- Host's Claude CLI accesses files via the mounted volume
+- The "uploads" subfolder is added automatically, keeping workspace organized for future subfolders
 
 See `docs/claude-proxy.md` for detailed proxy setup.

@@ -330,13 +330,18 @@ func (ch *ChatHandler) buildPromptWithAttachments(content string, attachments []
 func (ch *ChatHandler) getClaudePath(localPath string) string {
 	if ch.workspacePath != "" {
 		// Extract the relative path from uploadDir
+		// localPath: /data/uploads/temp/xxx-file.png
+		// uploadDir: /data/uploads
+		// relPath: temp/xxx-file.png
 		relPath, err := filepath.Rel(ch.uploadDir, localPath)
 		if err != nil {
 			log.Printf("Warning: could not get relative path for %s: %v", localPath, err)
 			return localPath
 		}
-		// Build the Claude path using workspacePath as base
-		claudePath := filepath.Join(ch.workspacePath, relPath)
+		// Build the Claude path: workspacePath/uploads/relPath
+		// workspacePath: /home/user/workspace
+		// result: /home/user/workspace/uploads/temp/xxx-file.png
+		claudePath := filepath.Join(ch.workspacePath, "uploads", relPath)
 		log.Printf("Mapped local path %s to Claude path %s", localPath, claudePath)
 		return claudePath
 	}
