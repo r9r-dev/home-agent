@@ -29,15 +29,15 @@
 </script>
 
 <div
-  class="thinking-block bg-muted/30 rounded-lg border-l-2 border-amber-500/50 overflow-hidden mb-3"
+  class="thinking-block bg-primary/5 rounded-lg border-l-2 border-primary/50 overflow-hidden mb-3"
 >
   <!-- Header -->
   <button
-    class="w-full flex items-center justify-between px-3 py-2 text-left hover:bg-muted/50 transition-colors"
+    class="w-full flex items-center justify-between px-3 py-2 text-left hover:bg-primary/10 transition-colors"
     onclick={toggleExpand}
     disabled={!canExpand}
   >
-    <div class="flex items-center gap-2 text-amber-600 dark:text-amber-400">
+    <div class="flex items-center gap-2 text-primary">
       <Icon icon="mynaui:lightbulb" class="w-4 h-4" />
       <span class="text-sm font-medium">Reflexion</span>
       {#if isStreaming}

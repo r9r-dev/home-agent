@@ -218,6 +218,14 @@
         {#if index > 0 && message.role === 'assistant' && messages[index - 1].role === 'assistant'}
           <hr class="border-t border-border my-2 w-full" />
         {/if}
+
+        <!-- Thinking Block: show before the last assistant message when streaming -->
+        {#if $currentThinking && message.role === 'assistant' && index === messages.length - 1}
+          <div class="self-start w-full max-w-[80%]">
+            <ThinkingBlock content={$currentThinking} isStreaming={isTyping} />
+          </div>
+        {/if}
+
         <div
           class="flex flex-col max-w-full {message.role === 'user' ? 'self-end items-end max-w-[80%]' : 'self-start items-start'}"
           data-role={message.role}
@@ -269,8 +277,8 @@
         </div>
       {/each}
 
-      <!-- Thinking Block (displayed while streaming and after response) -->
-      {#if $currentThinking}
+      <!-- Thinking Block: show before typing indicator if no assistant message yet -->
+      {#if $currentThinking && (messages.length === 0 || messages[messages.length - 1].role !== 'assistant')}
         <div class="self-start w-full max-w-[80%]">
           <ThinkingBlock content={$currentThinking} isStreaming={isTyping} />
         </div>
