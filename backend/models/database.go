@@ -48,10 +48,16 @@ type DB struct {
 func InitDB(dbPath string) (*DB, error) {
 	log.Printf("Initializing database at: %s", dbPath)
 
-	conn, err := sql.Open("sqlite", dbPath)
+	// Add SQLite pragmas for better concurrent access
+	dsn := dbPath + "?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)"
+	conn, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database: %w", err)
 	}
+
+	// Configure connection pool for concurrent access
+	conn.SetMaxOpenConns(1) // SQLite works best with single writer
+	conn.SetMaxIdleConns(1)
 
 	// Test the connection
 	if err := conn.Ping(); err != nil {
