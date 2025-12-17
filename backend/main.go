@@ -190,6 +190,7 @@ func main() {
 	app.Get("/api/sessions", func(c *fiber.Ctx) error {
 		sessions, err := sessionManager.ListSessions()
 		if err != nil {
+			log.Printf("Error listing sessions: %v", err)
 			return c.Status(500).JSON(fiber.Map{"error": err.Error()})
 		}
 		return c.JSON(sessions)
