@@ -22,16 +22,16 @@ You are NOT in a development environment. You are managing production home infra
 Be careful with destructive commands and always confirm before making significant changes.
 Respond in the same language as the user.`;
 
-// Map model names to Agent SDK format
+// Map model names to Agent SDK format (latest versions as of Dec 2025)
 function mapModel(model?: string): string {
   switch (model) {
     case "haiku":
-      return "claude-3-5-haiku-latest";
+      return "claude-haiku-4-5-latest";
     case "opus":
-      return "claude-opus-4-5-20251101";
+      return "claude-opus-4-5-latest";
     case "sonnet":
     default:
-      return "claude-sonnet-4-20250514";
+      return "claude-sonnet-4-5-latest";
   }
 }
 
@@ -276,7 +276,7 @@ Message de l'utilisateur: ${truncatedUser}
 Reponse de l'assistant: ${truncatedAssistant}`;
 
   const options: Options = {
-    model: "claude-3-5-haiku-latest",
+    model: "claude-haiku-4-5-latest",
     tools: [],
     permissionMode: "bypassPermissions",
     allowDangerouslySkipPermissions: true,
