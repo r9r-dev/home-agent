@@ -283,3 +283,43 @@ export async function importMemory(
   }
   return response.json();
 }
+
+// Tool calls API functions
+
+export interface ToolCallRecord {
+  id: number;
+  session_id: string;
+  tool_use_id: string;
+  tool_name: string;
+  input: string;
+  output: string;
+  status: 'running' | 'success' | 'error';
+  created_at: string;
+  completed_at?: string;
+}
+
+/**
+ * Fetch tool calls for a session (metadata for list display)
+ */
+export async function fetchToolCalls(sessionId: string): Promise<ToolCallRecord[]> {
+  const response = await fetch(`${API_BASE}/sessions/${sessionId}/tool-calls`);
+  if (!response.ok) {
+    throw new Error('Failed to fetch tool calls');
+  }
+  const data = await response.json();
+  return data || [];
+}
+
+/**
+ * Fetch full details of a single tool call (for lazy loading)
+ */
+export async function fetchToolCallDetail(toolUseId: string): Promise<ToolCallRecord | null> {
+  const response = await fetch(`${API_BASE}/tool-calls/${toolUseId}`);
+  if (!response.ok) {
+    if (response.status === 404) {
+      return null;
+    }
+    throw new Error('Failed to fetch tool call detail');
+  }
+  return response.json();
+}

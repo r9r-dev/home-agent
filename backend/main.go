@@ -214,6 +214,31 @@ func main() {
 		return c.JSON(messages)
 	})
 
+	// Tool calls API (for lazy loading)
+	app.Get("/api/sessions/:id/tool-calls", func(c *fiber.Ctx) error {
+		sessionID := c.Params("id")
+		toolCalls, err := db.GetToolCallsBySession(sessionID)
+		if err != nil {
+			return c.Status(500).JSON(fiber.Map{"error": err.Error()})
+		}
+		if toolCalls == nil {
+			toolCalls = []*models.ToolCall{}
+		}
+		return c.JSON(toolCalls)
+	})
+
+	app.Get("/api/tool-calls/:tool_use_id", func(c *fiber.Ctx) error {
+		toolUseID := c.Params("tool_use_id")
+		toolCall, err := db.GetToolCall(toolUseID)
+		if err != nil {
+			return c.Status(500).JSON(fiber.Map{"error": err.Error()})
+		}
+		if toolCall == nil {
+			return c.Status(404).JSON(fiber.Map{"error": "Tool call not found"})
+		}
+		return c.JSON(toolCall)
+	})
+
 	app.Delete("/api/sessions/:id", func(c *fiber.Ctx) error {
 		sessionID := c.Params("id")
 		if err := sessionManager.DeleteSession(sessionID); err != nil {

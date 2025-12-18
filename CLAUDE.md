@@ -120,13 +120,45 @@ Thinking Mode Feature (v0.15.0, Issue #6):
   - When enabled, passes `--thinking` flag to Claude CLI
   - Thinking blocks displayed in collapsible UI with amber styling
   - Thinking content streams in real-time, stays visible after response
-  - Not persisted to database (ephemeral, for current message only)
+  - Persisted to database with role "thinking"
 - Key files:
   - `frontend/src/components/ThinkingBlock.svelte` - Collapsible thinking display
   - `frontend/src/stores/chatStore.ts` - `thinkingEnabled`, `currentThinking` state
   - `backend/handlers/chat.go` - Handles `thinking` response type
   - `claude-proxy-sdk/src/claude.ts` - Handles thinking events from Claude Agent SDK
 - WebSocket message type: `{"type": "thinking", "content": "..."}`
+
+Tool Calls Display Feature (Issue #4):
+- **Tool Call Visualization**: Display Claude's tool usage inline in message flow
+  - Shows tool name, status (running/success/error), and execution time
+  - Collapsible blocks with lazy-loaded input/output content
+  - Color-coded: blue (running), green (success), red (error)
+  - Persisted to database for history viewing
+  - Automatic loading when opening existing conversations
+- Key files:
+  - `frontend/src/components/ToolCallBlock.svelte` - Collapsible tool call display with lazy loading
+  - `frontend/src/stores/chatStore.ts` - `activeToolCalls` Map, tool call actions
+  - `frontend/src/components/MessageList.svelte` - Renders tool calls inline
+  - `frontend/src/components/ChatWindow.svelte` - Handles tool WebSocket events
+  - `frontend/src/services/api.ts` - `fetchToolCalls()`, `fetchToolCallDetail()`
+  - `backend/handlers/chat.go` - Handles tool events, persistence
+  - `backend/models/database.go` - `tool_calls` table and CRUD
+  - `claude-proxy-sdk/src/claude.ts` - Captures tool events from Claude Agent SDK
+  - `claude-proxy-sdk/src/types.ts` - `ToolCallInfo` interface
+- Tool icons (MynaUI):
+  - Bash: `mynaui:terminal`
+  - Read/Write/Edit: `mynaui:file`
+  - Glob/Grep: `mynaui:search`
+  - Task/Agent: `mynaui:layers`
+  - WebFetch/WebSearch: `mynaui:globe`
+- WebSocket message types:
+  - `{"type": "tool_start", "tool": {"tool_use_id": "...", "tool_name": "...", "input": {...}}}`
+  - `{"type": "tool_progress", "tool": {"tool_use_id": "..."}, "elapsedTimeSeconds": 2.5}`
+  - `{"type": "tool_result", "tool": {"tool_use_id": "..."}, "toolOutput": "...", "isError": false}`
+  - `{"type": "tool_error", "tool": {"tool_use_id": "..."}, "toolOutput": "...", "isError": true}`
+- Endpoints:
+  - `GET /api/sessions/:id/tool-calls` - List tool calls for session (metadata only)
+  - `GET /api/tool-calls/:tool_use_id` - Get full tool call detail (lazy loading)
 
 Navigation & Memory Feature (v0.13.0):
 - **Menubar Component**: New navigation via Menubar (bits-ui) next to the halfred logo
@@ -192,7 +224,7 @@ type ClaudeExecutor interface {
 
 Implementation: `ProxyClaudeExecutor` - Connects to Claude Proxy SDK via WebSocket
 
-ClaudeResponse types: `chunk`, `thinking`, `done`, `error`, `session_id`
+ClaudeResponse types: `chunk`, `thinking`, `done`, `error`, `session_id`, `tool_start`, `tool_progress`, `tool_result`, `tool_error`
 
 ### Key Data Flow
 1. User sends message via WebSocket (`type: "message"`, optionally with `thinking: true`)
@@ -200,10 +232,10 @@ ClaudeResponse types: `chunk`, `thinking`, `done`, `error`, `session_id`
 3. Backend retrieves enabled memory entries and custom instructions from database
 4. Backend combines memory + custom instructions into system prompt context
 5. Backend calls ClaudeExecutor with combined context and thinking flag
-6. Executor streams responses back as `ClaudeResponse` events
-7. Backend forwards as `type: "chunk"` or `type: "thinking"` messages to frontend
-8. Backend saves messages to SQLite (thinking content not saved), generates summary title using Claude (haiku)
-9. Frontend accumulates chunks in store, displays thinking in collapsible block, updates UI reactively
+6. Executor streams responses back as `ClaudeResponse` events (including tool events)
+7. Backend forwards as `type: "chunk"`, `type: "thinking"`, or tool event messages to frontend
+8. Backend saves messages and tool calls to SQLite, generates summary title using Claude (haiku)
+9. Frontend accumulates chunks in store, displays thinking and tool calls in collapsible blocks, updates UI reactively
 
 ### Session Management (v0.16.0+)
 - Frontend starts with `null` session_id (no longer generates UUIDs)
@@ -241,6 +273,11 @@ Attachments format:
 {"type": "done", "sessionId": "..."}     // Response complete
 {"type": "session_id", "sessionId": "..."}  // New session created
 {"type": "error", "error": "..."}        // Error occurred
+// Tool call events
+{"type": "tool_start", "tool": {"tool_use_id": "...", "tool_name": "...", "input": {...}}}
+{"type": "tool_progress", "tool": {"tool_use_id": "..."}, "elapsedTimeSeconds": 2.5}
+{"type": "tool_result", "tool": {"tool_use_id": "..."}, "toolOutput": "...", "isError": false}
+{"type": "tool_error", "tool": {"tool_use_id": "..."}, "toolOutput": "...", "isError": true}
 ```
 
 ## REST API Endpoints
@@ -262,7 +299,9 @@ Attachments format:
 - `PUT /api/memory/:id` - Update memory entry (body: `{"title": "...", "content": "...", "enabled": bool}`)
 - `DELETE /api/memory/:id` - Delete memory entry
 - `GET /api/memory/export` - Export all memory entries as JSON
-- `POST /api/memory/import` - Import memory entries (body: `{"entries": [...]}`))
+- `POST /api/memory/import` - Import memory entries (body: `{"entries": [...]}`)
+- `GET /api/sessions/:id/tool-calls` - List tool calls for session (metadata only)
+- `GET /api/tool-calls/:tool_use_id` - Get full tool call detail (for lazy loading)
 
 ## Environment Variables
 

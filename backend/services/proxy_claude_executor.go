@@ -42,12 +42,25 @@ type ProxyRequest struct {
 	Thinking           bool   `json:"thinking,omitempty"`            // Enable extended thinking mode
 }
 
+// ProxyToolInfo represents tool information from proxy
+type ProxyToolInfo struct {
+	ToolUseID       string                 `json:"tool_use_id"`
+	ToolName        string                 `json:"tool_name"`
+	Input           map[string]interface{} `json:"input"`
+	ParentToolUseID string                 `json:"parent_tool_use_id,omitempty"`
+}
+
 // ProxyResponse represents a response from the proxy
 type ProxyResponse struct {
-	Type      string `json:"type"`                 // "chunk", "thinking", "done", "error", "session_id"
+	Type      string `json:"type"`                 // "chunk", "thinking", "done", "error", "session_id", "tool_start", "tool_progress", "tool_result", "tool_error"
 	Content   string `json:"content,omitempty"`    // Response content
 	SessionID string `json:"session_id,omitempty"` // Session ID from Claude
 	Error     string `json:"error,omitempty"`      // Error message
+	// Tool-specific fields
+	Tool               *ProxyToolInfo `json:"tool,omitempty"`
+	ElapsedTimeSeconds float64        `json:"elapsed_time_seconds,omitempty"`
+	ToolOutput         string         `json:"tool_output,omitempty"`
+	IsError            bool           `json:"is_error,omitempty"`
 }
 
 // TitleRequest represents a request to generate a title
@@ -201,6 +214,25 @@ func (pce *ProxyClaudeExecutor) ExecuteClaude(ctx context.Context, prompt string
 					Error: fmt.Errorf("proxy error: %s", response.Error),
 				}
 				return
+
+			case "tool_start", "tool_progress", "tool_result", "tool_error":
+				// Convert proxy tool info to service tool info
+				var toolInfo *ToolCallInfo
+				if response.Tool != nil {
+					toolInfo = &ToolCallInfo{
+						ToolUseID:       response.Tool.ToolUseID,
+						ToolName:        response.Tool.ToolName,
+						Input:           response.Tool.Input,
+						ParentToolUseID: response.Tool.ParentToolUseID,
+					}
+				}
+				responseChan <- ClaudeResponse{
+					Type:               response.Type,
+					Tool:               toolInfo,
+					ElapsedTimeSeconds: response.ElapsedTimeSeconds,
+					ToolOutput:         response.ToolOutput,
+					IsError:            response.IsError,
+				}
 			}
 		}
 	}()

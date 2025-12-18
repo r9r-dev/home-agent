@@ -5,12 +5,25 @@ import (
 	"strings"
 )
 
+// ToolCallInfo represents information about a tool call
+type ToolCallInfo struct {
+	ToolUseID       string                 `json:"tool_use_id"`
+	ToolName        string                 `json:"tool_name"`
+	Input           map[string]interface{} `json:"input"`
+	ParentToolUseID string                 `json:"parent_tool_use_id,omitempty"`
+}
+
 // ClaudeResponse represents a chunk of text from Claude's response
 type ClaudeResponse struct {
-	Type      string // "chunk", "thinking", "done", "error", "session_id"
+	Type      string // "chunk", "thinking", "done", "error", "session_id", "tool_start", "tool_progress", "tool_result", "tool_error"
 	Content   string
 	SessionID string
 	Error     error
+	// Tool-specific fields
+	Tool               *ToolCallInfo
+	ElapsedTimeSeconds float64
+	ToolOutput         string
+	IsError            bool
 }
 
 // ClaudeExecutor is the interface for executing Claude CLI commands

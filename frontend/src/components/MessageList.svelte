@@ -3,10 +3,11 @@
   import { marked } from 'marked';
   import hljs from 'highlight.js';
   import type { Message, MessageAttachment } from '../stores/chatStore';
-  import { currentThinking } from '../stores/chatStore';
+  import { currentThinking, activeToolCalls } from '../stores/chatStore';
   import { ScrollArea } from "$lib/components/ui/scroll-area";
   import Icon from "@iconify/svelte";
   import ThinkingBlock from './ThinkingBlock.svelte';
+  import ToolCallBlock from './ToolCallBlock.svelte';
 
   interface Props {
     messages?: Message[];
@@ -288,6 +289,15 @@
       {#if $currentThinking && (messages.length === 0 || messages[messages.length - 1].role !== 'assistant')}
         <div class="self-start w-full max-w-[80%]">
           <ThinkingBlock content={$currentThinking} isStreaming={isTyping} />
+        </div>
+      {/if}
+
+      <!-- Active Tool Calls: show inline after thinking block -->
+      {#if $activeToolCalls.length > 0}
+        <div class="self-start w-full max-w-[80%] space-y-2">
+          {#each $activeToolCalls as toolCall (toolCall.toolUseId)}
+            <ToolCallBlock {toolCall} defaultExpanded={toolCall.status === 'running'} />
+          {/each}
         </div>
       {/if}
 

@@ -2,8 +2,10 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -50,12 +52,24 @@ type MessageRequest struct {
 	Thinking    bool                `json:"thinking,omitempty"` // Enable extended thinking mode
 }
 
+// ToolInfo represents tool information for WebSocket responses
+type ToolInfo struct {
+	ToolUseID  string                 `json:"tool_use_id"`
+	ToolName   string                 `json:"tool_name"`
+	Input      map[string]interface{} `json:"input,omitempty"`
+}
+
 // MessageResponse represents a response chunk sent to the client
 type MessageResponse struct {
-	Type      string `json:"type"`       // "chunk", "thinking", "done", "error", "session_id"
+	Type      string `json:"type"`       // "chunk", "thinking", "done", "error", "session_id", "tool_start", "tool_progress", "tool_result", "tool_error"
 	Content   string `json:"content,omitempty"`
 	SessionID string `json:"session_id,omitempty"`
 	Error     string `json:"error,omitempty"`
+	// Tool-specific fields
+	Tool               *ToolInfo `json:"tool,omitempty"`
+	ElapsedTimeSeconds float64   `json:"elapsed_time_seconds,omitempty"`
+	ToolOutput         string    `json:"tool_output,omitempty"`
+	IsError            bool      `json:"is_error,omitempty"`
 }
 
 // HandleMessage processes a user message and streams Claude's response
@@ -257,6 +271,73 @@ func (ch *ChatHandler) processClaudeResponse(oldSessionID string, isNewConversat
 				Error: claudeResp.Error.Error(),
 			}
 			return
+
+		case "tool_start":
+			// Create tool call in database
+			if claudeResp.Tool != nil && currentSessionID != "" {
+				inputJSON, _ := json.Marshal(claudeResp.Tool.Input)
+				_, err := ch.db.CreateToolCall(currentSessionID, claudeResp.Tool.ToolUseID, claudeResp.Tool.ToolName, string(inputJSON))
+				if err != nil {
+					log.Printf("Warning: failed to create tool call: %v", err)
+				}
+			}
+
+			// Forward to client
+			var toolInfo *ToolInfo
+			if claudeResp.Tool != nil {
+				toolInfo = &ToolInfo{
+					ToolUseID: claudeResp.Tool.ToolUseID,
+					ToolName:  claudeResp.Tool.ToolName,
+					Input:     claudeResp.Tool.Input,
+				}
+			}
+			responseChan <- MessageResponse{
+				Type: "tool_start",
+				Tool: toolInfo,
+			}
+
+		case "tool_progress":
+			// Forward progress to client (no DB update needed)
+			var toolInfo *ToolInfo
+			if claudeResp.Tool != nil {
+				toolInfo = &ToolInfo{
+					ToolUseID: claudeResp.Tool.ToolUseID,
+					ToolName:  claudeResp.Tool.ToolName,
+				}
+			}
+			responseChan <- MessageResponse{
+				Type:               "tool_progress",
+				Tool:               toolInfo,
+				ElapsedTimeSeconds: claudeResp.ElapsedTimeSeconds,
+			}
+
+		case "tool_result", "tool_error":
+			// Update tool call in database with result
+			if claudeResp.Tool != nil {
+				status := "success"
+				if claudeResp.IsError || claudeResp.Type == "tool_error" {
+					status = "error"
+				}
+				err := ch.db.UpdateToolCallOutput(claudeResp.Tool.ToolUseID, claudeResp.ToolOutput, status)
+				if err != nil {
+					log.Printf("Warning: failed to update tool call: %v", err)
+				}
+			}
+
+			// Forward to client
+			var toolInfo *ToolInfo
+			if claudeResp.Tool != nil {
+				toolInfo = &ToolInfo{
+					ToolUseID: claudeResp.Tool.ToolUseID,
+					ToolName:  claudeResp.Tool.ToolName,
+				}
+			}
+			responseChan <- MessageResponse{
+				Type:       claudeResp.Type,
+				Tool:       toolInfo,
+				ToolOutput: claudeResp.ToolOutput,
+				IsError:    claudeResp.IsError,
+			}
 		}
 	}
 }

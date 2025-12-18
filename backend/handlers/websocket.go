@@ -42,11 +42,16 @@ type ClientMessage struct {
 
 // ServerMessage represents a message sent to the WebSocket client
 type ServerMessage struct {
-	Type      string `json:"type"`                // "chunk", "thinking", "done", "error", "pong", "history", "session_id"
+	Type      string `json:"type"`                // "chunk", "thinking", "done", "error", "pong", "history", "session_id", "tool_start", "tool_progress", "tool_result", "tool_error"
 	Content   string `json:"content,omitempty"`   // Message content
 	SessionID string `json:"sessionId,omitempty"` // Session ID
 	Error     string `json:"error,omitempty"`     // Error message
 	Messages  []MessageResponse `json:"messages,omitempty"` // History messages
+	// Tool-specific fields
+	Tool               *ToolInfo `json:"tool,omitempty"`
+	ElapsedTimeSeconds float64   `json:"elapsedTimeSeconds,omitempty"`
+	ToolOutput         string    `json:"toolOutput,omitempty"`
+	IsError            bool      `json:"isError,omitempty"`
 }
 
 // UpgradeMiddleware checks if the request should be upgraded to WebSocket
@@ -204,6 +209,15 @@ func (wsh *WebSocketHandler) handleChatMessage(c *websocket.Conn, clientMsg Clie
 			serverMsg = ServerMessage{
 				Type:  "error",
 				Error: response.Error,
+			}
+
+		case "tool_start", "tool_progress", "tool_result", "tool_error":
+			serverMsg = ServerMessage{
+				Type:               response.Type,
+				Tool:               response.Tool,
+				ElapsedTimeSeconds: response.ElapsedTimeSeconds,
+				ToolOutput:         response.ToolOutput,
+				IsError:            response.IsError,
 			}
 		}
 

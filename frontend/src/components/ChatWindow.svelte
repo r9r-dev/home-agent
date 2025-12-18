@@ -6,7 +6,7 @@
   import { onMount, onDestroy } from 'svelte';
   import { chatStore, currentThinking, type ClaudeModel, type MessageAttachment } from '../stores/chatStore';
   import { websocketService, type MessageAttachment as WsAttachment } from '../services/websocket';
-  import { fetchMessages, fetchSession, updateSessionModel, fetchSettings, updateSetting, type Message as ApiMessage, type UploadedFile } from '../services/api';
+  import { fetchMessages, fetchSession, updateSessionModel, fetchSettings, updateSetting, fetchToolCalls, type Message as ApiMessage, type UploadedFile, type ToolCallRecord } from '../services/api';
   import MessageList from './MessageList.svelte';
   import InputBox from './InputBox.svelte';
   import Sidebar from './Sidebar.svelte';
@@ -119,6 +119,25 @@
         }
         break;
 
+      case 'tool_start':
+        if (data.tool) {
+          chatStore.startToolCall(data.tool.tool_use_id, data.tool.tool_name, data.tool.input);
+        }
+        break;
+
+      case 'tool_progress':
+        if (data.tool) {
+          chatStore.updateToolProgress(data.tool.tool_use_id, data.elapsedTimeSeconds || 0);
+        }
+        break;
+
+      case 'tool_result':
+      case 'tool_error':
+        if (data.tool) {
+          chatStore.completeToolCall(data.tool.tool_use_id, data.toolOutput || '', data.isError || data.type === 'tool_error');
+        }
+        break;
+
       default:
         console.warn('[ChatWindow] Unknown message type:', data.type);
     }
@@ -208,9 +227,10 @@
    */
   async function handleSelectSession(sessionId: string) {
     try {
-      const [session, apiMessages] = await Promise.all([
+      const [session, apiMessages, toolCallRecords] = await Promise.all([
         fetchSession(sessionId),
         fetchMessages(sessionId),
+        fetchToolCalls(sessionId),
       ]);
 
       const messages = apiMessages.map((msg: ApiMessage) => ({
@@ -220,7 +240,18 @@
         timestamp: new Date(msg.created_at),
       }));
 
+      // Convert tool call records to ToolCall format
+      const toolCalls = toolCallRecords.map((tc: ToolCallRecord) => ({
+        toolUseId: tc.tool_use_id,
+        toolName: tc.tool_name,
+        status: tc.status,
+        startTime: new Date(tc.created_at),
+        endTime: tc.completed_at ? new Date(tc.completed_at) : undefined,
+        // Don't load input/output here - lazy loading
+      }));
+
       chatStore.loadMessages(sessionId, messages, session.model as ClaudeModel);
+      chatStore.loadToolCalls(toolCalls);
       chatStore.setError(null);
     } catch (error) {
       console.error('[ChatWindow] Failed to load session:', error);
@@ -233,6 +264,7 @@
    */
   function handleNewConversation() {
     chatStore.clearMessages();
+    chatStore.clearToolCalls();
     if (inputBox) {
       inputBox.focus();
     }

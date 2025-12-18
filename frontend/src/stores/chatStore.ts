@@ -23,6 +23,19 @@ export interface Message {
 
 export type ClaudeModel = 'haiku' | 'sonnet' | 'opus';
 
+export type ToolCallStatus = 'running' | 'success' | 'error';
+
+export interface ToolCall {
+  toolUseId: string;
+  toolName: string;
+  input?: Record<string, unknown>;
+  output?: string;
+  status: ToolCallStatus;
+  elapsedTimeSeconds?: number;
+  startTime: Date;
+  endTime?: Date;
+}
+
 export interface ChatState {
   messages: Message[];
   currentSessionId: string | null;
@@ -33,6 +46,7 @@ export interface ChatState {
   responseCompleted: boolean; // Track if last response was completed (for paragraph separation)
   thinkingEnabled: boolean; // Extended thinking mode enabled
   currentThinking: string | null; // Current thinking content being streamed
+  activeToolCalls: Map<string, ToolCall>; // Active tool calls keyed by toolUseId
 }
 
 // Initial state - sessionId is null until SDK provides one
@@ -46,6 +60,7 @@ const initialState: ChatState = {
   responseCompleted: false,
   thinkingEnabled: false,
   currentThinking: null,
+  activeToolCalls: new Map(),
 };
 
 /**
@@ -270,12 +285,86 @@ function createChatStore() {
     },
 
     /**
+     * Start a new tool call
+     */
+    startToolCall: (toolUseId: string, toolName: string, input?: Record<string, unknown>) => {
+      update((state) => {
+        const newMap = new Map(state.activeToolCalls);
+        newMap.set(toolUseId, {
+          toolUseId,
+          toolName,
+          input,
+          status: 'running',
+          startTime: new Date(),
+        });
+        return { ...state, activeToolCalls: newMap };
+      });
+    },
+
+    /**
+     * Update tool call progress (elapsed time)
+     */
+    updateToolProgress: (toolUseId: string, elapsedTimeSeconds: number) => {
+      update((state) => {
+        const newMap = new Map(state.activeToolCalls);
+        const tool = newMap.get(toolUseId);
+        if (tool) {
+          newMap.set(toolUseId, { ...tool, elapsedTimeSeconds });
+        }
+        return { ...state, activeToolCalls: newMap };
+      });
+    },
+
+    /**
+     * Complete a tool call with output
+     */
+    completeToolCall: (toolUseId: string, output: string, isError: boolean) => {
+      update((state) => {
+        const newMap = new Map(state.activeToolCalls);
+        const tool = newMap.get(toolUseId);
+        if (tool) {
+          newMap.set(toolUseId, {
+            ...tool,
+            output,
+            status: isError ? 'error' : 'success',
+            endTime: new Date(),
+          });
+        }
+        return { ...state, activeToolCalls: newMap };
+      });
+    },
+
+    /**
+     * Load tool calls from an existing session
+     */
+    loadToolCalls: (toolCalls: ToolCall[]) => {
+      update((state) => {
+        const newMap = new Map<string, ToolCall>();
+        for (const tc of toolCalls) {
+          newMap.set(tc.toolUseId, tc);
+        }
+        return { ...state, activeToolCalls: newMap };
+      });
+    },
+
+    /**
+     * Clear all tool calls
+     */
+    clearToolCalls: () => {
+      update((state) => ({
+        ...state,
+        activeToolCalls: new Map(),
+      }));
+    },
+
+    /**
      * Reset the entire store
      * SessionId will be set when SDK provides one
      */
     reset: () => {
       set({
         ...initialState,
+        activeToolCalls: new Map(), // Ensure new Map instance
       });
     },
   };
@@ -291,3 +380,6 @@ export const error = derived(chatStore, ($store) => $store.error);
 export const selectedModel = derived(chatStore, ($store) => $store.selectedModel);
 export const thinkingEnabled = derived(chatStore, ($store) => $store.thinkingEnabled);
 export const currentThinking = derived(chatStore, ($store) => $store.currentThinking);
+export const activeToolCalls = derived(chatStore, ($store) =>
+  Array.from($store.activeToolCalls.values())
+);

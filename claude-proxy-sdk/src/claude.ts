@@ -4,8 +4,11 @@
  */
 
 import { query, type Options, type SDKMessage, type PreToolUseHookInput, type PostToolUseHookInput } from "@anthropic-ai/claude-agent-sdk";
-import type { ProxyRequest, ProxyResponse } from "./types.js";
+import type { ProxyRequest, ProxyResponse, ToolCallInfo } from "./types.js";
 import { auditLog } from "./hooks/audit.js";
+
+// Track active tool calls by index (for correlating content blocks)
+const activeToolCalls = new Map<number, ToolCallInfo>();
 
 // System prompt for Home Agent
 const SYSTEM_PROMPT = `You are a system administrator assistant running on a home server infrastructure.
@@ -192,8 +195,9 @@ function processMessage(message: SDKMessage, sessionId?: string): ProxyResponse 
   switch (message.type) {
     case "system":
       if (message.subtype === "init") {
-        // Reset streaming flag for new session
+        // Reset streaming flag and active tool calls for new session
         hasReceivedStreamContent = false;
+        activeToolCalls.clear();
         // Capture session ID from init message
         return {
           type: "session_id",
@@ -232,6 +236,28 @@ function processMessage(message: SDKMessage, sessionId?: string): ProxyResponse 
     case "stream_event":
       // Streaming delta content
       const event = message.event;
+
+      // Handle content_block_start for tool_use
+      if (event.type === "content_block_start") {
+        const contentBlock = (event as { type: "content_block_start"; index: number; content_block: { type: string; id?: string; name?: string; input?: Record<string, unknown> } }).content_block;
+        if (contentBlock?.type === "tool_use" && contentBlock.id && contentBlock.name) {
+          const toolInfo: ToolCallInfo = {
+            tool_use_id: contentBlock.id,
+            tool_name: contentBlock.name,
+            input: contentBlock.input || {},
+          };
+          // Store for later correlation
+          const index = (event as { index: number }).index;
+          activeToolCalls.set(index, toolInfo);
+
+          return {
+            type: "tool_start",
+            tool: toolInfo,
+          };
+        }
+      }
+
+      // Handle content_block_delta
       if (event.type === "content_block_delta") {
         const delta = event.delta;
         if (delta.type === "text_delta" && "text" in delta) {
@@ -247,6 +273,43 @@ function processMessage(message: SDKMessage, sessionId?: string): ProxyResponse 
             content: (delta as { type: "thinking_delta"; thinking: string }).thinking,
           };
         }
+        // input_json_delta - we skip accumulating input here
+        // The full input will be available via REST API (lazy loading)
+      }
+      break;
+
+    case "tool_progress":
+      // Tool execution progress update
+      const toolProgress = message as { type: "tool_progress"; tool_use_id: string; tool_name: string; parent_tool_use_id: string | null; elapsed_time_seconds: number };
+      return {
+        type: "tool_progress",
+        tool: {
+          tool_use_id: toolProgress.tool_use_id,
+          tool_name: toolProgress.tool_name,
+          input: {},
+          parent_tool_use_id: toolProgress.parent_tool_use_id,
+        },
+        elapsed_time_seconds: toolProgress.elapsed_time_seconds,
+      };
+
+    case "user":
+      // Check for tool results in synthetic user messages
+      const userMessage = message as { type: "user"; isSynthetic?: boolean; parent_tool_use_id: string | null; tool_use_result?: unknown };
+      if (userMessage.isSynthetic && userMessage.tool_use_result !== undefined && userMessage.parent_tool_use_id) {
+        // Determine if it's an error based on the result structure
+        const result = userMessage.tool_use_result;
+        const isError = typeof result === "object" && result !== null && "is_error" in result && (result as { is_error?: boolean }).is_error === true;
+
+        return {
+          type: isError ? "tool_error" : "tool_result",
+          tool: {
+            tool_use_id: userMessage.parent_tool_use_id,
+            tool_name: "", // Will be correlated by tool_use_id
+            input: {},
+          },
+          tool_output: typeof result === "string" ? result : JSON.stringify(result),
+          is_error: isError,
+        };
       }
       break;
 

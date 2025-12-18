@@ -39,6 +39,19 @@ type MemoryEntry struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
+// ToolCall represents a tool call made by Claude
+type ToolCall struct {
+	ID          int        `json:"id"`
+	SessionID   string     `json:"session_id"`
+	ToolUseID   string     `json:"tool_use_id"`
+	ToolName    string     `json:"tool_name"`
+	Input       string     `json:"input"`  // JSON string
+	Output      string     `json:"output"` // JSON string or text
+	Status      string     `json:"status"` // "running", "success", "error"
+	CreatedAt   time.Time  `json:"created_at"`
+	CompletedAt *time.Time `json:"completed_at,omitempty"`
+}
+
 // DB wraps the SQLite database connection
 type DB struct {
 	conn *sql.DB
@@ -139,6 +152,23 @@ func (db *DB) createTables() error {
 	);
 	`
 
+	toolCallsTable := `
+	CREATE TABLE IF NOT EXISTS tool_calls (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		session_id TEXT NOT NULL,
+		tool_use_id TEXT UNIQUE NOT NULL,
+		tool_name TEXT NOT NULL,
+		input TEXT NOT NULL DEFAULT '{}',
+		output TEXT DEFAULT '',
+		status TEXT NOT NULL CHECK(status IN ('running', 'success', 'error')),
+		created_at DATETIME NOT NULL,
+		completed_at DATETIME,
+		FOREIGN KEY (session_id) REFERENCES sessions(session_id) ON DELETE CASCADE
+	);
+	CREATE INDEX IF NOT EXISTS idx_tool_calls_session_id ON tool_calls(session_id);
+	CREATE INDEX IF NOT EXISTS idx_tool_calls_tool_use_id ON tool_calls(tool_use_id);
+	`
+
 	// Execute table creation queries
 	if _, err := db.conn.Exec(sessionsTable); err != nil {
 		return fmt.Errorf("failed to create sessions table: %w", err)
@@ -154,6 +184,10 @@ func (db *DB) createTables() error {
 
 	if _, err := db.conn.Exec(memoryTable); err != nil {
 		return fmt.Errorf("failed to create memory table: %w", err)
+	}
+
+	if _, err := db.conn.Exec(toolCallsTable); err != nil {
+		return fmt.Errorf("failed to create tool_calls table: %w", err)
 	}
 
 	// Run migrations (ignore errors if columns already exist)
@@ -440,7 +474,7 @@ func (db *DB) UpdateClaudeSessionID(sessionID, claudeSessionID string) error {
 	return nil
 }
 
-// UpdateSessionID updates the session_id of a session and all its messages
+// UpdateSessionID updates the session_id of a session, all its messages, and tool calls
 // This is used when the SDK returns a new session_id after resume
 func (db *DB) UpdateSessionID(oldSessionID, newSessionID string) error {
 	tx, err := db.conn.Begin()
@@ -453,6 +487,12 @@ func (db *DB) UpdateSessionID(oldSessionID, newSessionID string) error {
 	_, err = tx.Exec("UPDATE messages SET session_id = ? WHERE session_id = ?", newSessionID, oldSessionID)
 	if err != nil {
 		return fmt.Errorf("failed to update messages session_id: %w", err)
+	}
+
+	// Update tool calls
+	_, err = tx.Exec("UPDATE tool_calls SET session_id = ? WHERE session_id = ?", newSessionID, oldSessionID)
+	if err != nil {
+		return fmt.Errorf("failed to update tool_calls session_id: %w", err)
 	}
 
 	// Update session
@@ -478,12 +518,18 @@ func (db *DB) UpdateSessionID(oldSessionID, newSessionID string) error {
 	return nil
 }
 
-// DeleteSession deletes a session and all its messages
+// DeleteSession deletes a session and all its messages and tool calls
 func (db *DB) DeleteSession(sessionID string) error {
 	// Delete messages first (foreign key)
 	_, err := db.conn.Exec("DELETE FROM messages WHERE session_id = ?", sessionID)
 	if err != nil {
 		return fmt.Errorf("failed to delete messages: %w", err)
+	}
+
+	// Delete tool calls
+	_, err = db.conn.Exec("DELETE FROM tool_calls WHERE session_id = ?", sessionID)
+	if err != nil {
+		return fmt.Errorf("failed to delete tool calls: %w", err)
 	}
 
 	// Delete session
@@ -755,6 +801,150 @@ func (db *DB) GetEnabledMemoryEntries() ([]*MemoryEntry, error) {
 	}
 
 	return entries, nil
+}
+
+// CreateToolCall creates a new tool call record
+func (db *DB) CreateToolCall(sessionID, toolUseID, toolName, input string) (*ToolCall, error) {
+	now := time.Now()
+
+	query := `
+	INSERT INTO tool_calls (session_id, tool_use_id, tool_name, input, output, status, created_at)
+	VALUES (?, ?, ?, ?, '', 'running', ?)
+	`
+
+	result, err := db.conn.Exec(query, sessionID, toolUseID, toolName, input, now)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create tool call: %w", err)
+	}
+
+	id, err := result.LastInsertId()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get last insert id: %w", err)
+	}
+
+	log.Printf("Created tool call: %s (%s) for session %s", toolName, toolUseID, sessionID)
+
+	return &ToolCall{
+		ID:        int(id),
+		SessionID: sessionID,
+		ToolUseID: toolUseID,
+		ToolName:  toolName,
+		Input:     input,
+		Output:    "",
+		Status:    "running",
+		CreatedAt: now,
+	}, nil
+}
+
+// UpdateToolCallOutput updates a tool call with its output and status
+func (db *DB) UpdateToolCallOutput(toolUseID, output, status string) error {
+	now := time.Now()
+
+	query := `
+	UPDATE tool_calls
+	SET output = ?, status = ?, completed_at = ?
+	WHERE tool_use_id = ?
+	`
+
+	result, err := db.conn.Exec(query, output, status, now, toolUseID)
+	if err != nil {
+		return fmt.Errorf("failed to update tool call: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return fmt.Errorf("tool call not found: %s", toolUseID)
+	}
+
+	log.Printf("Updated tool call %s: status=%s", toolUseID, status)
+	return nil
+}
+
+// GetToolCall retrieves a tool call by its tool_use_id (for lazy loading details)
+func (db *DB) GetToolCall(toolUseID string) (*ToolCall, error) {
+	query := `
+	SELECT id, session_id, tool_use_id, tool_name, input, output, status, created_at, completed_at
+	FROM tool_calls
+	WHERE tool_use_id = ?
+	`
+
+	var tc ToolCall
+	var completedAt sql.NullTime
+	err := db.conn.QueryRow(query, toolUseID).Scan(
+		&tc.ID,
+		&tc.SessionID,
+		&tc.ToolUseID,
+		&tc.ToolName,
+		&tc.Input,
+		&tc.Output,
+		&tc.Status,
+		&tc.CreatedAt,
+		&completedAt,
+	)
+
+	if err == sql.ErrNoRows {
+		return nil, nil // Tool call not found
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to get tool call: %w", err)
+	}
+
+	if completedAt.Valid {
+		tc.CompletedAt = &completedAt.Time
+	}
+
+	return &tc, nil
+}
+
+// GetToolCallsBySession retrieves all tool calls for a session (metadata only for lazy loading)
+func (db *DB) GetToolCallsBySession(sessionID string) ([]*ToolCall, error) {
+	query := `
+	SELECT id, session_id, tool_use_id, tool_name, input, output, status, created_at, completed_at
+	FROM tool_calls
+	WHERE session_id = ?
+	ORDER BY created_at ASC
+	`
+
+	rows, err := db.conn.Query(query, sessionID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get tool calls: %w", err)
+	}
+	defer rows.Close()
+
+	var toolCalls []*ToolCall
+	for rows.Next() {
+		var tc ToolCall
+		var completedAt sql.NullTime
+		err := rows.Scan(
+			&tc.ID,
+			&tc.SessionID,
+			&tc.ToolUseID,
+			&tc.ToolName,
+			&tc.Input,
+			&tc.Output,
+			&tc.Status,
+			&tc.CreatedAt,
+			&completedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan tool call: %w", err)
+		}
+		if completedAt.Valid {
+			tc.CompletedAt = &completedAt.Time
+		}
+		toolCalls = append(toolCalls, &tc)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating tool calls: %w", err)
+	}
+
+	return toolCalls, nil
 }
 
 // Close closes the database connection

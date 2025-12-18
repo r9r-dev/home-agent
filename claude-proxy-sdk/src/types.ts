@@ -14,12 +14,26 @@ export interface ProxyRequest {
   thinking?: boolean;
 }
 
+// Tool call information
+export interface ToolCallInfo {
+  tool_use_id: string;
+  tool_name: string;
+  input: Record<string, unknown>;
+  parent_tool_use_id?: string | null;
+}
+
 // Response to Home Agent backend
 export interface ProxyResponse {
-  type: "chunk" | "thinking" | "session_id" | "done" | "error";
+  type: "chunk" | "thinking" | "session_id" | "done" | "error"
+      | "tool_start" | "tool_progress" | "tool_result" | "tool_error";
   content?: string;
   session_id?: string;
   error?: string;
+  // Tool-specific fields
+  tool?: ToolCallInfo;
+  elapsed_time_seconds?: number;
+  tool_output?: string;
+  is_error?: boolean;
 }
 
 // Configuration
