@@ -3,7 +3,7 @@
   import { marked } from 'marked';
   import hljs from 'highlight.js';
   import type { Message, MessageAttachment, FlowItem } from '../stores/chatStore';
-  import { currentThinking, unifiedFlow } from '../stores/chatStore';
+  import { currentThinking, unifiedFlow, runningToolCalls } from '../stores/chatStore';
   import { ScrollArea } from "$lib/components/ui/scroll-area";
   import Icon from "@iconify/svelte";
   import ThinkingBlock from './ThinkingBlock.svelte';
@@ -175,6 +175,7 @@
     isTyping;
     $currentThinking;
     flow;
+    $runningToolCalls;
 
     // Run after render
     tick().then(() => {
@@ -309,6 +310,15 @@
             <ThinkingBlock content={$currentThinking} isStreaming={isTyping} />
           </div>
         {/if}
+      {/if}
+
+      <!-- Running tool calls: show after streaming thinking -->
+      {#if $runningToolCalls.length > 0}
+        <div class="self-start w-full max-w-[80%] space-y-2">
+          {#each $runningToolCalls as toolCall (toolCall.toolUseId)}
+            <ToolCallBlock {toolCall} defaultExpanded={true} />
+          {/each}
+        </div>
       {/if}
 
       {#if isTyping}

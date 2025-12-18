@@ -410,7 +410,8 @@ export const activeToolCalls = derived(chatStore, ($store) =>
   Array.from($store.activeToolCalls.values())
 );
 
-// Unified flow combining messages and tool calls in chronological order
+// Unified flow combining messages and COMPLETED tool calls in chronological order
+// Running tool calls are excluded and displayed separately after streaming thinking
 export const unifiedFlow = derived(chatStore, ($store): FlowItem[] => {
   const items: FlowItem[] = [];
 
@@ -431,13 +432,16 @@ export const unifiedFlow = derived(chatStore, ($store): FlowItem[] => {
     }
   }
 
-  // Add active tool calls
+  // Add only COMPLETED tool calls (not running)
+  // Running tool calls are displayed separately after streaming thinking
   for (const toolCall of $store.activeToolCalls.values()) {
-    items.push({
-      type: 'tool_call',
-      timestamp: toolCall.startTime,
-      toolCall,
-    });
+    if (toolCall.status !== 'running') {
+      items.push({
+        type: 'tool_call',
+        timestamp: toolCall.startTime,
+        toolCall,
+      });
+    }
   }
 
   // Sort by timestamp
@@ -445,3 +449,8 @@ export const unifiedFlow = derived(chatStore, ($store): FlowItem[] => {
 
   return items;
 });
+
+// Running tool calls (displayed separately after streaming thinking)
+export const runningToolCalls = derived(chatStore, ($store) =>
+  Array.from($store.activeToolCalls.values()).filter(tc => tc.status === 'running')
+);

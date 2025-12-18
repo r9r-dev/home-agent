@@ -59,6 +59,12 @@ export async function* executePrompt(
     thinking,
   } = request;
 
+  // Reset state at the beginning of each execution
+  hasReceivedStreamContent = false;
+  activeToolCalls.clear();
+  activeToolInputs.clear();
+  toolUseIdToIndex.clear();
+
   // Build system prompt with custom instructions
   let systemPrompt = SYSTEM_PROMPT;
   if (custom_instructions) {
@@ -149,9 +155,15 @@ export async function* executePrompt(
 
   try {
     for await (const message of query({ prompt, options })) {
+      // Debug: log raw SDK message type
+      console.log(`[SDK] Message type: ${message.type}`, message.type === "stream_event" ? `event: ${(message as any).event?.type}` : "");
+
       const response = processMessage(message, session_id);
 
       if (response) {
+        // Debug: log response being sent
+        console.log(`[Proxy] Sending: ${response.type}`, response.tool ? `tool: ${response.tool.tool_name} (${response.tool.tool_use_id})` : "");
+
         // Track session ID
         if (response.type === "session_id" && response.session_id) {
           detectedSessionId = response.session_id;
@@ -322,6 +334,7 @@ function processMessage(message: SDKMessage, sessionId?: string): ProxyResponse 
     case "user":
       // Check for tool results in synthetic user messages
       const userMessage = message as { type: "user"; isSynthetic?: boolean; parent_tool_use_id: string | null; tool_use_result?: unknown };
+      console.log(`[SDK] User message: isSynthetic=${userMessage.isSynthetic}, parent_tool_use_id=${userMessage.parent_tool_use_id}, has_result=${userMessage.tool_use_result !== undefined}`);
       if (userMessage.isSynthetic && userMessage.tool_use_result !== undefined && userMessage.parent_tool_use_id) {
         // Determine if it's an error based on the result structure
         const result = userMessage.tool_use_result;
