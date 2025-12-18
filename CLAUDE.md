@@ -8,6 +8,8 @@ Home Agent is a web chat interface that wraps Claude Code CLI. It consists of a 
 
 The backend connects to a Claude Proxy SDK service via WebSocket. The proxy runs on the host machine and uses the Claude Agent SDK to execute Claude commands on behalf of the containerized backend. This architecture allows the container to use Claude without including the CLI in the image.
 
+**Claude Agent SDK Documentation**: https://platform.claude.com/docs/en/agent-sdk/overview
+
 ## Build & Development Commands
 
 ```bash
