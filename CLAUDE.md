@@ -328,8 +328,28 @@ WORKSPACE_PATH=/home/user/workspace  # Host path where /workspace is mounted
 ```bash
 PORT=9090                       # Port to listen on (default: 9090)
 HOST=0.0.0.0                    # Host to bind to (default: 0.0.0.0)
-API_KEY=...                     # API key for authentication (optional)
+API_KEY=...                     # API key for proxy authentication (optional)
+ANTHROPIC_API_KEY=...           # Anthropic API key (optional if using OAuth)
 ```
+
+### Authentication Options
+
+The Claude Agent SDK supports two authentication methods:
+
+1. **API Key** (recommended for production):
+   ```bash
+   export ANTHROPIC_API_KEY=sk-ant-api03-...
+   ```
+
+2. **OAuth with Claude Pro/Max subscription**:
+   ```bash
+   claude setup-token  # Creates a 1-year token
+   ```
+   Token stored in `~/.claude/.credentials.json`
+
+**Priority order**: `ANTHROPIC_API_KEY` > OAuth token > Interactive login
+
+If OAuth token expires, run `claude setup-token` or `claude /login` again.
 
 ## Docker Deployment
 

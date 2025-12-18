@@ -27,7 +27,7 @@ curl -fsSL https://raw.githubusercontent.com/r9r-dev/home-agent/main/claude-prox
 
 - Node.js >= 24.0.0
 - Claude Code CLI installe (`claude --version`)
-- Cle API Anthropic (`ANTHROPIC_API_KEY`)
+- Authentification configuree (cle API ou OAuth, voir section Authentification)
 
 ### Etapes
 
@@ -59,11 +59,48 @@ npm start
 | Features | Basiques | Hooks, MCP, Subagents |
 | Sessions | Gestion manuelle | Intégrée au SDK |
 
-## Prérequis
+## Prerequis
 
 - Node.js >= 24.0.0
-- Claude Code CLI installé (`claude --version`)
-- Clé API Anthropic (`ANTHROPIC_API_KEY`)
+- Claude Code CLI installe (`claude --version`)
+- Authentification configuree (voir section suivante)
+
+## Authentification
+
+Le SDK supporte deux methodes d'authentification:
+
+### Option 1: Cle API Anthropic (recommande pour production)
+
+```bash
+export ANTHROPIC_API_KEY=sk-ant-api03-...
+```
+
+Avantages: stable, pas d'expiration
+Inconvenient: paiement a l'usage
+
+### Option 2: Abonnement Claude Pro/Max (OAuth)
+
+Utilise ton abonnement Claude Pro/Max au lieu de payer l'API:
+
+```bash
+# Token longue duree (1 an)
+claude setup-token
+```
+
+Cette commande ouvre un navigateur pour l'authentification et cree un token valide 1 an.
+
+**Verification:**
+```bash
+cat ~/.claude/.credentials.json
+# Verifie que expiresAt est dans ~1 an
+```
+
+**Priorite d'authentification:**
+1. `ANTHROPIC_API_KEY` (si defini)
+2. Token OAuth (`~/.claude/.credentials.json`)
+3. Abonnement Claude interactif
+
+**Note:** Si le token expire, relance `claude setup-token` ou `claude /login`.
 
 ## Installation
 
@@ -76,12 +113,12 @@ npm install
 
 Variables d'environnement:
 
-| Variable | Description | Défaut |
+| Variable | Description | Defaut |
 |----------|-------------|--------|
-| `PROXY_PORT` | Port d'écoute | `9090` |
-| `PROXY_HOST` | Adresse d'écoute | `0.0.0.0` |
-| `PROXY_API_KEY` | Clé API pour authentification | (vide) |
-| `ANTHROPIC_API_KEY` | Clé API Anthropic | (requis) |
+| `PROXY_PORT` | Port d'ecoute | `9090` |
+| `PROXY_HOST` | Adresse d'ecoute | `0.0.0.0` |
+| `PROXY_API_KEY` | Cle API pour authentification proxy | (vide) |
+| `ANTHROPIC_API_KEY` | Cle API Anthropic (optionnel si OAuth) | (voir Authentification) |
 
 ## Utilisation
 
