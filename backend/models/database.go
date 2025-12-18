@@ -836,17 +836,17 @@ func (db *DB) CreateToolCall(sessionID, toolUseID, toolName, input string) (*Too
 	}, nil
 }
 
-// UpdateToolCallOutput updates a tool call with its output and status
-func (db *DB) UpdateToolCallOutput(toolUseID, output, status string) error {
+// UpdateToolCallOutput updates a tool call with its input, output, and status
+func (db *DB) UpdateToolCallOutput(toolUseID, input, output, status string) error {
 	now := time.Now()
 
 	query := `
 	UPDATE tool_calls
-	SET output = ?, status = ?, completed_at = ?
+	SET input = ?, output = ?, status = ?, completed_at = ?
 	WHERE tool_use_id = ?
 	`
 
-	result, err := db.conn.Exec(query, output, status, now, toolUseID)
+	result, err := db.conn.Exec(query, input, output, status, now, toolUseID)
 	if err != nil {
 		return fmt.Errorf("failed to update tool call: %w", err)
 	}

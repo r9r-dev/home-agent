@@ -92,10 +92,23 @@
     expanded = !expanded;
   }
 
-  // Use loaded detail or fall back to toolCall data
+  // Use loaded detail, streaming inputJson, or fall back to toolCall data
   function getInput(): string {
     if (loadedDetail) return loadedDetail.input;
-    if (toolCall.input) return JSON.stringify(toolCall.input, null, 2);
+    // Use streaming inputJson if available
+    if (toolCall.inputJson) {
+      try {
+        // Try to parse and pretty-print
+        const parsed = JSON.parse(toolCall.inputJson);
+        return JSON.stringify(parsed, null, 2);
+      } catch {
+        // If not valid JSON yet (still streaming), show raw
+        return toolCall.inputJson;
+      }
+    }
+    if (toolCall.input && Object.keys(toolCall.input).length > 0) {
+      return JSON.stringify(toolCall.input, null, 2);
+    }
     return '{}';
   }
 

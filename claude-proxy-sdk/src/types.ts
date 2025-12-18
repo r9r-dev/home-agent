@@ -25,7 +25,8 @@ export interface ToolCallInfo {
 // Response to Home Agent backend
 export interface ProxyResponse {
   type: "chunk" | "thinking" | "session_id" | "done" | "error"
-      | "tool_start" | "tool_progress" | "tool_result" | "tool_error";
+      | "tool_start" | "tool_progress" | "tool_result" | "tool_error"
+      | "tool_input_delta";
   content?: string;
   session_id?: string;
   error?: string;
@@ -34,6 +35,8 @@ export interface ProxyResponse {
   elapsed_time_seconds?: number;
   tool_output?: string;
   is_error?: boolean;
+  // Tool input streaming
+  input_delta?: string;  // JSON delta for input streaming
 }
 
 // Configuration

@@ -2,8 +2,8 @@
   import { onMount, tick } from 'svelte';
   import { marked } from 'marked';
   import hljs from 'highlight.js';
-  import type { Message, MessageAttachment } from '../stores/chatStore';
-  import { currentThinking, activeToolCalls } from '../stores/chatStore';
+  import type { Message, MessageAttachment, FlowItem } from '../stores/chatStore';
+  import { currentThinking, unifiedFlow } from '../stores/chatStore';
   import { ScrollArea } from "$lib/components/ui/scroll-area";
   import Icon from "@iconify/svelte";
   import ThinkingBlock from './ThinkingBlock.svelte';
@@ -15,6 +15,9 @@
   }
 
   let { messages = [], isTyping = false }: Props = $props();
+
+  // Use unified flow for chronological display
+  let flow = $derived($unifiedFlow);
 
   let scrollAreaViewport = $state<HTMLElement | null>(null);
   let shouldAutoScroll = $state(true);
@@ -171,6 +174,7 @@
     messages;
     isTyping;
     $currentThinking;
+    flow;
 
     // Run after render
     tick().then(() => {
@@ -204,7 +208,7 @@
     aria-live="polite"
     aria-label="Chat messages"
   >
-    {#if messages.length === 0}
+    {#if flow.length === 0}
       <div class="flex-1 flex flex-col items-center justify-center text-center py-16 px-8">
         <h1 class="text-4xl font-medium text-foreground mb-4 tracking-tight">
           Bienvenue, Ronan.
@@ -214,91 +218,97 @@
         </p>
       </div>
     {:else}
-      {#each messages as message, index (message.id)}
-        <!-- Add separator between consecutive assistant messages -->
-        {#if index > 0 && message.role === 'assistant' && messages[index - 1].role === 'assistant'}
-          <hr class="border-t border-border my-2 w-full" />
+      {#each flow as item, index (item.type === 'tool_call' ? item.toolCall?.toolUseId : item.message?.id)}
+        <!-- Separator between consecutive assistant messages -->
+        {#if index > 0 && item.type === 'message' && item.message?.role === 'assistant'}
+          {@const prevItem = flow[index - 1]}
+          {#if prevItem.type === 'message' && prevItem.message?.role === 'assistant'}
+            <hr class="border-t border-border my-2 w-full" />
+          {/if}
         {/if}
 
-        <!-- Thinking Block: show before the last assistant message when streaming -->
-        {#if $currentThinking && message.role === 'assistant' && index === messages.length - 1}
+        <!-- Streaming thinking: show before the last assistant message when streaming -->
+        {#if $currentThinking && item.type === 'message' && item.message?.role === 'assistant' && index === flow.length - 1}
           <div class="self-start w-full max-w-[80%]">
             <ThinkingBlock content={$currentThinking} isStreaming={isTyping} />
           </div>
         {/if}
 
         <!-- Historical thinking message -->
-        {#if message.role === 'thinking'}
+        {#if item.type === 'thinking' && item.message}
           <div class="self-start w-full max-w-[80%]">
-            <ThinkingBlock content={message.content} />
+            <ThinkingBlock content={item.message.content} />
           </div>
-        {:else}
-        <div
-          class="flex flex-col max-w-full {message.role === 'user' ? 'self-end items-end max-w-[80%]' : 'self-start items-start'}"
-          data-role={message.role}
-        >
-          <div class="{message.role === 'user' ? 'bg-muted border border-border rounded-lg px-5 py-4' : ''}">
-            {#if message.role === 'user'}
-              <!-- User message with potential attachments -->
-              {@const attachments = getMessageAttachments(message)}
-              {@const cleanContent = getCleanContent(message)}
-              {#if attachments.length > 0}
-                <div class="flex flex-wrap gap-2 mb-3">
-                  {#each attachments as attachment (attachment.id)}
-                    {#if attachment.type === 'image'}
-                      <a href={attachment.path} target="_blank" rel="noopener noreferrer" class="block">
-                        <img
-                          src={attachment.path}
-                          alt={attachment.filename}
-                          class="max-w-[200px] max-h-[150px] rounded border border-border object-cover hover:opacity-90 transition-opacity"
-                        />
-                      </a>
-                    {:else}
-                      <a
-                        href={attachment.path}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        class="flex items-center gap-2 bg-background border border-border rounded px-3 py-2 hover:bg-muted transition-colors"
-                      >
-                        <Icon icon="mynaui:file" class="size-4 text-muted-foreground" />
-                        <span class="text-xs font-mono truncate max-w-[150px]">{attachment.filename}</span>
-                      </a>
-                    {/if}
-                  {/each}
+
+        <!-- Tool call block -->
+        {:else if item.type === 'tool_call' && item.toolCall}
+          <div class="self-start w-full max-w-[80%]">
+            <ToolCallBlock toolCall={item.toolCall} defaultExpanded={item.toolCall.status === 'running'} />
+          </div>
+
+        <!-- User or assistant message -->
+        {:else if item.type === 'message' && item.message}
+          {@const message = item.message}
+          <div
+            class="flex flex-col max-w-full {message.role === 'user' ? 'self-end items-end max-w-[80%]' : 'self-start items-start'}"
+            data-role={message.role}
+          >
+            <div class="{message.role === 'user' ? 'bg-muted border border-border rounded-lg px-5 py-4' : ''}">
+              {#if message.role === 'user'}
+                <!-- User message with potential attachments -->
+                {@const attachments = getMessageAttachments(message)}
+                {@const cleanContent = getCleanContent(message)}
+                {#if attachments.length > 0}
+                  <div class="flex flex-wrap gap-2 mb-3">
+                    {#each attachments as attachment (attachment.id)}
+                      {#if attachment.type === 'image'}
+                        <a href={attachment.path} target="_blank" rel="noopener noreferrer" class="block">
+                          <img
+                            src={attachment.path}
+                            alt={attachment.filename}
+                            class="max-w-[200px] max-h-[150px] rounded border border-border object-cover hover:opacity-90 transition-opacity"
+                          />
+                        </a>
+                      {:else}
+                        <a
+                          href={attachment.path}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          class="flex items-center gap-2 bg-background border border-border rounded px-3 py-2 hover:bg-muted transition-colors"
+                        >
+                          <Icon icon="mynaui:file" class="size-4 text-muted-foreground" />
+                          <span class="text-xs font-mono truncate max-w-[150px]">{attachment.filename}</span>
+                        </a>
+                      {/if}
+                    {/each}
+                  </div>
+                {/if}
+                {#if cleanContent}
+                  <div class="text-sm leading-relaxed font-mono whitespace-pre-wrap text-foreground">
+                    {cleanContent}
+                  </div>
+                {/if}
+              {:else}
+                <div class="text-sm leading-relaxed font-mono markdown-body text-foreground">
+                  {@html renderMarkdown(message.content)}
                 </div>
               {/if}
-              {#if cleanContent}
-                <div class="text-sm leading-relaxed font-mono whitespace-pre-wrap text-foreground">
-                  {cleanContent}
-                </div>
-              {/if}
-            {:else}
-              <div class="text-sm leading-relaxed font-mono markdown-body text-foreground">
-                {@html renderMarkdown(message.content)}
-              </div>
-            {/if}
+            </div>
+            <span class="mt-2 text-[0.625rem] text-muted-foreground font-mono">
+              {formatTime(message.timestamp)}
+            </span>
           </div>
-          <span class="mt-2 text-[0.625rem] text-muted-foreground font-mono">
-            {formatTime(message.timestamp)}
-          </span>
-        </div>
         {/if}
       {/each}
 
-      <!-- Thinking Block: show before typing indicator if no assistant message yet -->
-      {#if $currentThinking && (messages.length === 0 || messages[messages.length - 1].role !== 'assistant')}
-        <div class="self-start w-full max-w-[80%]">
-          <ThinkingBlock content={$currentThinking} isStreaming={isTyping} />
-        </div>
-      {/if}
-
-      <!-- Active Tool Calls: show inline after thinking block -->
-      {#if $activeToolCalls.length > 0}
-        <div class="self-start w-full max-w-[80%] space-y-2">
-          {#each $activeToolCalls as toolCall (toolCall.toolUseId)}
-            <ToolCallBlock {toolCall} defaultExpanded={toolCall.status === 'running'} />
-          {/each}
-        </div>
+      <!-- Streaming thinking: show at end if no assistant message to attach to -->
+      {#if $currentThinking}
+        {@const lastItem = flow[flow.length - 1]}
+        {#if !lastItem || lastItem.type !== 'message' || lastItem.message?.role !== 'assistant'}
+          <div class="self-start w-full max-w-[80%]">
+            <ThinkingBlock content={$currentThinking} isStreaming={isTyping} />
+          </div>
+        {/if}
       {/if}
 
       {#if isTyping}

@@ -61,7 +61,7 @@ type ToolInfo struct {
 
 // MessageResponse represents a response chunk sent to the client
 type MessageResponse struct {
-	Type      string `json:"type"`       // "chunk", "thinking", "done", "error", "session_id", "tool_start", "tool_progress", "tool_result", "tool_error"
+	Type      string `json:"type"`       // "chunk", "thinking", "done", "error", "session_id", "tool_start", "tool_progress", "tool_result", "tool_error", "tool_input_delta"
 	Content   string `json:"content,omitempty"`
 	SessionID string `json:"session_id,omitempty"`
 	Error     string `json:"error,omitempty"`
@@ -70,6 +70,7 @@ type MessageResponse struct {
 	ElapsedTimeSeconds float64   `json:"elapsed_time_seconds,omitempty"`
 	ToolOutput         string    `json:"tool_output,omitempty"`
 	IsError            bool      `json:"is_error,omitempty"`
+	InputDelta         string    `json:"input_delta,omitempty"` // JSON delta for streaming tool input
 }
 
 // HandleMessage processes a user message and streams Claude's response
@@ -311,14 +312,31 @@ func (ch *ChatHandler) processClaudeResponse(oldSessionID string, isNewConversat
 				ElapsedTimeSeconds: claudeResp.ElapsedTimeSeconds,
 			}
 
+		case "tool_input_delta":
+			// Forward input delta to client for real-time display
+			var toolInfo *ToolInfo
+			if claudeResp.Tool != nil {
+				toolInfo = &ToolInfo{
+					ToolUseID: claudeResp.Tool.ToolUseID,
+					ToolName:  claudeResp.Tool.ToolName,
+				}
+			}
+			responseChan <- MessageResponse{
+				Type:       "tool_input_delta",
+				Tool:       toolInfo,
+				InputDelta: claudeResp.InputDelta,
+			}
+
 		case "tool_result", "tool_error":
-			// Update tool call in database with result
+			// Update tool call in database with input and result
 			if claudeResp.Tool != nil {
 				status := "success"
 				if claudeResp.IsError || claudeResp.Type == "tool_error" {
 					status = "error"
 				}
-				err := ch.db.UpdateToolCallOutput(claudeResp.Tool.ToolUseID, claudeResp.ToolOutput, status)
+				// Convert input map to JSON string
+				inputJSON, _ := json.Marshal(claudeResp.Tool.Input)
+				err := ch.db.UpdateToolCallOutput(claudeResp.Tool.ToolUseID, string(inputJSON), claudeResp.ToolOutput, status)
 				if err != nil {
 					log.Printf("Warning: failed to update tool call: %v", err)
 				}

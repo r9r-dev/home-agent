@@ -131,6 +131,12 @@
         }
         break;
 
+      case 'tool_input_delta':
+        if (data.tool && data.input_delta) {
+          chatStore.appendToolInputDelta(data.tool.tool_use_id, data.input_delta);
+        }
+        break;
+
       case 'tool_result':
       case 'tool_error':
         if (data.tool) {

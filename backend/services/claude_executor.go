@@ -15,7 +15,7 @@ type ToolCallInfo struct {
 
 // ClaudeResponse represents a chunk of text from Claude's response
 type ClaudeResponse struct {
-	Type      string // "chunk", "thinking", "done", "error", "session_id", "tool_start", "tool_progress", "tool_result", "tool_error"
+	Type      string // "chunk", "thinking", "done", "error", "session_id", "tool_start", "tool_progress", "tool_result", "tool_error", "tool_input_delta"
 	Content   string
 	SessionID string
 	Error     error
@@ -24,6 +24,7 @@ type ClaudeResponse struct {
 	ElapsedTimeSeconds float64
 	ToolOutput         string
 	IsError            bool
+	InputDelta         string // JSON delta for streaming tool input
 }
 
 // ClaudeExecutor is the interface for executing Claude CLI commands

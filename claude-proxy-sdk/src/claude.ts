@@ -9,6 +9,10 @@ import { auditLog } from "./hooks/audit.js";
 
 // Track active tool calls by index (for correlating content blocks)
 const activeToolCalls = new Map<number, ToolCallInfo>();
+// Track accumulated input JSON strings by tool index
+const activeToolInputs = new Map<number, string>();
+// Map tool_use_id to index for correlating results
+const toolUseIdToIndex = new Map<string, number>();
 
 // System prompt for Home Agent
 const SYSTEM_PROMPT = `You are a system administrator assistant running on a home server infrastructure.
@@ -198,6 +202,8 @@ function processMessage(message: SDKMessage, sessionId?: string): ProxyResponse 
         // Reset streaming flag and active tool calls for new session
         hasReceivedStreamContent = false;
         activeToolCalls.clear();
+        activeToolInputs.clear();
+        toolUseIdToIndex.clear();
         // Capture session ID from init message
         return {
           type: "session_id",
@@ -249,6 +255,7 @@ function processMessage(message: SDKMessage, sessionId?: string): ProxyResponse 
           // Store for later correlation
           const index = (event as { index: number }).index;
           activeToolCalls.set(index, toolInfo);
+          toolUseIdToIndex.set(contentBlock.id, index);
 
           return {
             type: "tool_start",
@@ -259,7 +266,10 @@ function processMessage(message: SDKMessage, sessionId?: string): ProxyResponse 
 
       // Handle content_block_delta
       if (event.type === "content_block_delta") {
-        const delta = event.delta;
+        const eventWithIndex = event as { type: "content_block_delta"; index: number; delta: { type: string; text?: string; thinking?: string; partial_json?: string } };
+        const delta = eventWithIndex.delta;
+        const blockIndex = eventWithIndex.index;
+
         if (delta.type === "text_delta" && "text" in delta) {
           hasReceivedStreamContent = true;
           return {
@@ -270,11 +280,28 @@ function processMessage(message: SDKMessage, sessionId?: string): ProxyResponse 
           hasReceivedStreamContent = true;
           return {
             type: "thinking",
-            content: (delta as { type: "thinking_delta"; thinking: string }).thinking,
+            content: delta.thinking as string,
           };
+        } else if (delta.type === "input_json_delta" && "partial_json" in delta) {
+          // Accumulate input JSON delta
+          const partialJson = delta.partial_json as string;
+          const currentInput = activeToolInputs.get(blockIndex) || "";
+          activeToolInputs.set(blockIndex, currentInput + partialJson);
+
+          // Get the tool info for this block
+          const toolInfo = activeToolCalls.get(blockIndex);
+          if (toolInfo) {
+            return {
+              type: "tool_input_delta",
+              tool: {
+                tool_use_id: toolInfo.tool_use_id,
+                tool_name: toolInfo.tool_name,
+                input: {},
+              },
+              input_delta: partialJson,
+            };
+          }
         }
-        // input_json_delta - we skip accumulating input here
-        // The full input will be available via REST API (lazy loading)
       }
       break;
 
@@ -300,12 +327,35 @@ function processMessage(message: SDKMessage, sessionId?: string): ProxyResponse 
         const result = userMessage.tool_use_result;
         const isError = typeof result === "object" && result !== null && "is_error" in result && (result as { is_error?: boolean }).is_error === true;
 
+        // Get accumulated input for this tool call
+        const toolUseId = userMessage.parent_tool_use_id;
+        const toolIndex = toolUseIdToIndex.get(toolUseId);
+        let accumulatedInput: Record<string, unknown> = {};
+        let toolName = "";
+
+        if (toolIndex !== undefined) {
+          // Parse accumulated input JSON
+          const inputJsonStr = activeToolInputs.get(toolIndex);
+          if (inputJsonStr) {
+            try {
+              accumulatedInput = JSON.parse(inputJsonStr);
+            } catch {
+              // If parsing fails, leave as empty object
+            }
+          }
+          // Get tool name from stored info
+          const toolInfo = activeToolCalls.get(toolIndex);
+          if (toolInfo) {
+            toolName = toolInfo.tool_name;
+          }
+        }
+
         return {
           type: isError ? "tool_error" : "tool_result",
           tool: {
-            tool_use_id: userMessage.parent_tool_use_id,
-            tool_name: "", // Will be correlated by tool_use_id
-            input: {},
+            tool_use_id: toolUseId,
+            tool_name: toolName,
+            input: accumulatedInput,
           },
           tool_output: typeof result === "string" ? result : JSON.stringify(result),
           is_error: isError,

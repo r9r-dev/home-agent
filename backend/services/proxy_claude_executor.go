@@ -52,7 +52,7 @@ type ProxyToolInfo struct {
 
 // ProxyResponse represents a response from the proxy
 type ProxyResponse struct {
-	Type      string `json:"type"`                 // "chunk", "thinking", "done", "error", "session_id", "tool_start", "tool_progress", "tool_result", "tool_error"
+	Type      string `json:"type"`                 // "chunk", "thinking", "done", "error", "session_id", "tool_start", "tool_progress", "tool_result", "tool_error", "tool_input_delta"
 	Content   string `json:"content,omitempty"`    // Response content
 	SessionID string `json:"session_id,omitempty"` // Session ID from Claude
 	Error     string `json:"error,omitempty"`      // Error message
@@ -61,6 +61,7 @@ type ProxyResponse struct {
 	ElapsedTimeSeconds float64        `json:"elapsed_time_seconds,omitempty"`
 	ToolOutput         string         `json:"tool_output,omitempty"`
 	IsError            bool           `json:"is_error,omitempty"`
+	InputDelta         string         `json:"input_delta,omitempty"` // JSON delta for streaming tool input
 }
 
 // TitleRequest represents a request to generate a title
@@ -232,6 +233,21 @@ func (pce *ProxyClaudeExecutor) ExecuteClaude(ctx context.Context, prompt string
 					ElapsedTimeSeconds: response.ElapsedTimeSeconds,
 					ToolOutput:         response.ToolOutput,
 					IsError:            response.IsError,
+				}
+
+			case "tool_input_delta":
+				// Convert proxy tool info to service tool info
+				var toolInfo *ToolCallInfo
+				if response.Tool != nil {
+					toolInfo = &ToolCallInfo{
+						ToolUseID: response.Tool.ToolUseID,
+						ToolName:  response.Tool.ToolName,
+					}
+				}
+				responseChan <- ClaudeResponse{
+					Type:       "tool_input_delta",
+					Tool:       toolInfo,
+					InputDelta: response.InputDelta,
 				}
 			}
 		}

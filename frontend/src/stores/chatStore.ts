@@ -29,11 +29,22 @@ export interface ToolCall {
   toolUseId: string;
   toolName: string;
   input?: Record<string, unknown>;
+  inputJson?: string; // Raw JSON string for streaming display
   output?: string;
   status: ToolCallStatus;
   elapsedTimeSeconds?: number;
   startTime: Date;
   endTime?: Date;
+}
+
+// Flow item types for unified message + tool call display
+export type FlowItemType = 'message' | 'tool_call' | 'thinking';
+
+export interface FlowItem {
+  type: FlowItemType;
+  timestamp: Date;
+  message?: Message;
+  toolCall?: ToolCall;
 }
 
 export interface ChatState {
@@ -316,6 +327,21 @@ function createChatStore() {
     },
 
     /**
+     * Append input delta to a tool call (for streaming input display)
+     */
+    appendToolInputDelta: (toolUseId: string, delta: string) => {
+      update((state) => {
+        const newMap = new Map(state.activeToolCalls);
+        const tool = newMap.get(toolUseId);
+        if (tool) {
+          const currentInput = tool.inputJson || '';
+          newMap.set(toolUseId, { ...tool, inputJson: currentInput + delta });
+        }
+        return { ...state, activeToolCalls: newMap };
+      });
+    },
+
+    /**
      * Complete a tool call with output
      */
     completeToolCall: (toolUseId: string, output: string, isError: boolean) => {
@@ -383,3 +409,39 @@ export const currentThinking = derived(chatStore, ($store) => $store.currentThin
 export const activeToolCalls = derived(chatStore, ($store) =>
   Array.from($store.activeToolCalls.values())
 );
+
+// Unified flow combining messages and tool calls in chronological order
+export const unifiedFlow = derived(chatStore, ($store): FlowItem[] => {
+  const items: FlowItem[] = [];
+
+  // Add messages (excluding thinking which we handle separately)
+  for (const msg of $store.messages) {
+    if (msg.role === 'thinking') {
+      items.push({
+        type: 'thinking',
+        timestamp: msg.timestamp,
+        message: msg,
+      });
+    } else {
+      items.push({
+        type: 'message',
+        timestamp: msg.timestamp,
+        message: msg,
+      });
+    }
+  }
+
+  // Add active tool calls
+  for (const toolCall of $store.activeToolCalls.values()) {
+    items.push({
+      type: 'tool_call',
+      timestamp: toolCall.startTime,
+      toolCall,
+    });
+  }
+
+  // Sort by timestamp
+  items.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+
+  return items;
+});
