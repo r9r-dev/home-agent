@@ -155,8 +155,8 @@ export async function* executePrompt(
 
   try {
     for await (const message of query({ prompt, options })) {
-      // Debug: log raw SDK message type
-      console.log(`[SDK] Message type: ${message.type}`, message.type === "stream_event" ? `event: ${(message as any).event?.type}` : "");
+      // Debug: log ALL raw SDK messages to understand the protocol
+      console.log(`[SDK RAW] ${JSON.stringify(message).substring(0, 500)}`);
 
       const response = processMessage(message, session_id);
 
@@ -315,6 +315,24 @@ function processMessage(message: SDKMessage, sessionId?: string): ProxyResponse 
           }
         }
       }
+
+      // Handle content_block_stop - tool input is complete
+      if (event.type === "content_block_stop") {
+        const stopEvent = event as { type: "content_block_stop"; index: number };
+        const toolInfo = activeToolCalls.get(stopEvent.index);
+        if (toolInfo) {
+          // Parse the accumulated input
+          const inputJsonStr = activeToolInputs.get(stopEvent.index);
+          if (inputJsonStr) {
+            try {
+              const parsedInput = JSON.parse(inputJsonStr);
+              console.log(`[SDK] content_block_stop: tool ${toolInfo.tool_name} input complete:`, JSON.stringify(parsedInput).substring(0, 200));
+            } catch (e) {
+              console.log(`[SDK] content_block_stop: tool ${toolInfo.tool_name} input parse error`);
+            }
+          }
+        }
+      }
       break;
 
     case "tool_progress":
@@ -332,16 +350,47 @@ function processMessage(message: SDKMessage, sessionId?: string): ProxyResponse 
       };
 
     case "user":
-      // Check for tool results in synthetic user messages
-      const userMessage = message as { type: "user"; isSynthetic?: boolean; parent_tool_use_id: string | null; tool_use_result?: unknown };
-      console.log(`[SDK] User message: isSynthetic=${userMessage.isSynthetic}, parent_tool_use_id=${userMessage.parent_tool_use_id}, has_result=${userMessage.tool_use_result !== undefined}`);
-      if (userMessage.isSynthetic && userMessage.tool_use_result !== undefined && userMessage.parent_tool_use_id) {
-        // Determine if it's an error based on the result structure
-        const result = userMessage.tool_use_result;
-        const isError = typeof result === "object" && result !== null && "is_error" in result && (result as { is_error?: boolean }).is_error === true;
+      // Check for tool results in user messages (SDK sends tool results as user messages with parent_tool_use_id)
+      const userMessage = message as {
+        type: "user";
+        parent_tool_use_id: string | null;
+        message?: {
+          content?: Array<{
+            type: string;
+            tool_use_id?: string;
+            content?: string | Array<{ type: string; text?: string }>;
+            is_error?: boolean;
+          }>;
+        };
+      };
+
+      // If this message has a parent_tool_use_id, it's a tool result
+      if (userMessage.parent_tool_use_id) {
+        const toolUseId = userMessage.parent_tool_use_id;
+
+        // Extract tool result from message.content
+        let toolOutput = "";
+        let isError = false;
+
+        if (userMessage.message?.content) {
+          for (const block of userMessage.message.content) {
+            if (block.type === "tool_result" && block.tool_use_id === toolUseId) {
+              isError = block.is_error || false;
+              if (typeof block.content === "string") {
+                toolOutput = block.content;
+              } else if (Array.isArray(block.content)) {
+                // Content can be an array of text blocks
+                toolOutput = block.content
+                  .filter((c) => c.type === "text" && c.text)
+                  .map((c) => c.text)
+                  .join("\n");
+              }
+              break;
+            }
+          }
+        }
 
         // Get accumulated input for this tool call
-        const toolUseId = userMessage.parent_tool_use_id;
         const toolIndex = toolUseIdToIndex.get(toolUseId);
         let accumulatedInput: Record<string, unknown> = {};
         let toolName = "";
@@ -363,6 +412,8 @@ function processMessage(message: SDKMessage, sessionId?: string): ProxyResponse 
           }
         }
 
+        console.log(`[SDK] Tool result for ${toolName} (${toolUseId}): error=${isError}, output_len=${toolOutput.length}`);
+
         return {
           type: isError ? "tool_error" : "tool_result",
           tool: {
@@ -370,7 +421,7 @@ function processMessage(message: SDKMessage, sessionId?: string): ProxyResponse 
             tool_name: toolName,
             input: accumulatedInput,
           },
-          tool_output: typeof result === "string" ? result : JSON.stringify(result),
+          tool_output: toolOutput,
           is_error: isError,
         };
       }
