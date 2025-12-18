@@ -126,7 +126,7 @@
         }
 
         // Upload file
-        const uploaded = await uploadFile(file, sessionId || undefined);
+        const uploaded = await uploadFile(file);
         attachments = [...attachments, uploaded];
       }
     } catch (error) {

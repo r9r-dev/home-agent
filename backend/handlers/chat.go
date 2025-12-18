@@ -75,24 +75,27 @@ func (ch *ChatHandler) HandleMessage(ctx context.Context, request MessageRequest
 	// Build prompt with attachments
 	prompt := ch.buildPromptWithAttachments(request.Content, request.Attachments)
 
-	// Get or create session with the specified model
-	sessionID, isNew, err := ch.sessionManager.GetOrCreateSessionWithModel(request.SessionID, model)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get or create session: %w", err)
-	}
-
-	if !isNew {
-		// Update the model if the session already exists (user might have changed it)
-		ch.sessionManager.UpdateSessionModel(sessionID, model)
-	}
-
-	// Save user message to database (save original content, not the augmented prompt)
+	// Prepare user content for saving (original content, not the augmented prompt)
 	userContent := request.Content
 	if len(request.Attachments) > 0 {
 		// Include attachment info in saved message for display
 		userContent = ch.buildDisplayContentWithAttachments(request.Content, request.Attachments)
 	}
-	ch.sessionManager.SaveMessage(sessionID, "user", userContent)
+
+	// Determine if this is a new conversation or a resume
+	isNewConversation := request.SessionID == ""
+	sessionID := request.SessionID
+
+	// For existing sessions, verify it exists and save user message now
+	if !isNewConversation {
+		if !ch.sessionManager.SessionExists(sessionID) {
+			return nil, fmt.Errorf("session not found: %s", sessionID)
+		}
+		// Update model if changed
+		ch.sessionManager.UpdateSessionModel(sessionID, model)
+		// Save user message before calling SDK (it will be updated with new session_id)
+		ch.sessionManager.SaveMessage(sessionID, "user", userContent)
+	}
 
 	// Get custom instructions from settings
 	customInstructions := ""
@@ -127,9 +130,10 @@ func (ch *ChatHandler) HandleMessage(ctx context.Context, request MessageRequest
 		}
 	}
 
-	// Execute Claude with our session ID
-	// isNew determines whether to use --session-id (new) or --resume (existing)
-	claudeResponseChan, err := ch.claudeExecutor.ExecuteClaude(ctx, prompt, sessionID, isNew, model, fullInstructions, request.Thinking)
+	// Execute Claude
+	// For new conversations: sessionID is empty, SDK will generate one
+	// For resume: sessionID is provided, SDK will resume and return new ID
+	claudeResponseChan, err := ch.claudeExecutor.ExecuteClaude(ctx, prompt, sessionID, isNewConversation, model, fullInstructions, request.Thinking)
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute claude: %w", err)
 	}
@@ -138,17 +142,23 @@ func (ch *ChatHandler) HandleMessage(ctx context.Context, request MessageRequest
 	responseChan := make(chan MessageResponse, 100)
 
 	// Start goroutine to process Claude's responses
-	go ch.processClaudeResponse(sessionID, isNew, request.Content, claudeResponseChan, responseChan)
+	go ch.processClaudeResponse(sessionID, isNewConversation, model, userContent, request.Content, claudeResponseChan, responseChan)
 
 	return responseChan, nil
 }
 
 // processClaudeResponse processes the Claude response stream and sends formatted responses
-func (ch *ChatHandler) processClaudeResponse(sessionID string, isNewSession bool, userMessage string, claudeResponseChan <-chan services.ClaudeResponse, responseChan chan<- MessageResponse) {
+// oldSessionID: the session ID provided by frontend (empty for new conversations)
+// isNewConversation: true if this is a new conversation
+// model: the model to use
+// userContent: the user message content to save (with attachment markers)
+// userMessage: the original user message (for title generation)
+func (ch *ChatHandler) processClaudeResponse(oldSessionID string, isNewConversation bool, model string, userContent string, userMessage string, claudeResponseChan <-chan services.ClaudeResponse, responseChan chan<- MessageResponse) {
 	defer close(responseChan)
 
 	var fullAssistantResponse strings.Builder
 	var fullThinkingContent strings.Builder
+	var currentSessionID string = oldSessionID
 
 	for claudeResp := range claudeResponseChan {
 		switch claudeResp.Type {
@@ -173,40 +183,70 @@ func (ch *ChatHandler) processClaudeResponse(sessionID string, isNewSession bool
 			}
 
 		case "session_id":
+			// SDK returned a session_id
+			sdkSessionID := claudeResp.SessionID
+
+			if isNewConversation {
+				// New conversation: create session with SDK's session_id
+				_, err := ch.sessionManager.CreateSessionWithID(sdkSessionID, model)
+				if err != nil {
+					responseChan <- MessageResponse{
+						Type:  "error",
+						Error: fmt.Sprintf("failed to create session: %v", err),
+					}
+					return
+				}
+				// Save user message now that we have a session
+				ch.sessionManager.SaveMessage(sdkSessionID, "user", userContent)
+				currentSessionID = sdkSessionID
+			} else {
+				// Resume: update session_id if it changed
+				if sdkSessionID != oldSessionID {
+					err := ch.sessionManager.UpdateSessionID(oldSessionID, sdkSessionID)
+					if err != nil {
+						// Log error but continue - messages were already saved with old ID
+						fmt.Printf("Warning: failed to update session ID: %v\n", err)
+					}
+					currentSessionID = sdkSessionID
+				}
+			}
+
+			// Send session_id to client (always use the current/new ID)
 			responseChan <- MessageResponse{
 				Type:      "session_id",
-				SessionID: sessionID,
+				SessionID: currentSessionID,
 			}
 
 		case "done":
 			// Save thinking content to database (before assistant message)
 			thinkingMessage := fullThinkingContent.String()
 			if thinkingMessage != "" {
-				ch.sessionManager.SaveMessage(sessionID, "thinking", thinkingMessage)
+				ch.sessionManager.SaveMessage(currentSessionID, "thinking", thinkingMessage)
 			}
 
 			// Save assistant's full response to database
 			assistantMessage := fullAssistantResponse.String()
 			if assistantMessage != "" {
-				ch.sessionManager.SaveMessage(sessionID, "assistant", assistantMessage)
+				ch.sessionManager.SaveMessage(currentSessionID, "assistant", assistantMessage)
 			}
 
 			// Send done signal to client
 			responseChan <- MessageResponse{
 				Type:      "done",
-				SessionID: sessionID,
+				SessionID: currentSessionID,
 				Content:   assistantMessage,
 			}
 
 			// Generate a summary title for new sessions (async, don't block)
-			if isNewSession && assistantMessage != "" {
+			if isNewConversation && assistantMessage != "" {
+				sessionForTitle := currentSessionID
 				go func() {
 					title, err := ch.claudeExecutor.GenerateTitleSummary(userMessage, assistantMessage)
 					if err != nil {
 						return
 					}
 					if title != "" {
-						ch.sessionManager.UpdateSessionTitle(sessionID, title)
+						ch.sessionManager.UpdateSessionTitle(sessionForTitle, title)
 					}
 				}()
 			}
@@ -324,7 +364,7 @@ func (ch *ChatHandler) getClaudePath(localPath string) string {
 }
 
 // getPhysicalPath converts an API path to a physical file path
-// API path format: /api/uploads/{session_id}/{filename}
+// API path format: /api/uploads/{filename}
 func (ch *ChatHandler) getPhysicalPath(apiPath string) string {
 	// Remove /api/uploads/ prefix
 	prefix := "/api/uploads/"
@@ -332,8 +372,8 @@ func (ch *ChatHandler) getPhysicalPath(apiPath string) string {
 		return ""
 	}
 
-	relativePath := strings.TrimPrefix(apiPath, prefix)
-	return filepath.Join(ch.uploadDir, relativePath)
+	filename := strings.TrimPrefix(apiPath, prefix)
+	return filepath.Join(ch.uploadDir, filename)
 }
 
 // readFileContent reads the content of a text file

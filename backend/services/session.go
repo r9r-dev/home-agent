@@ -5,7 +5,6 @@ import (
 	"log"
 	"sync"
 
-	"github.com/google/uuid"
 	"github.com/ronan/home-agent/models"
 )
 
@@ -23,22 +22,15 @@ func NewSessionManager(db *models.DB) *SessionManager {
 	}
 }
 
-// CreateSession creates a new session with a generated UUID and default model (haiku)
-func (sm *SessionManager) CreateSession() (string, error) {
-	return sm.CreateSessionWithModel("haiku")
-}
-
-// CreateSessionWithModel creates a new session with a generated UUID and specified model
-func (sm *SessionManager) CreateSessionWithModel(model string) (string, error) {
-	sessionID := uuid.New().String()
-
+// CreateSessionWithID creates a new session with a specific ID (from SDK) and model
+func (sm *SessionManager) CreateSessionWithID(sessionID, model string) (*models.Session, error) {
 	session, err := sm.db.CreateSessionWithModel(sessionID, model)
 	if err != nil {
-		return "", fmt.Errorf("failed to create session in database: %w", err)
+		return nil, fmt.Errorf("failed to create session in database: %w", err)
 	}
 
 	log.Printf("SessionManager: Created new session %s with model %s", session.SessionID, model)
-	return session.SessionID, nil
+	return session, nil
 }
 
 // GetSession retrieves a session by ID
@@ -102,60 +94,12 @@ func (sm *SessionManager) SessionExists(sessionID string) bool {
 	return session != nil
 }
 
-// MapWebSessionToClaude maps a web session ID to a Claude session ID
-// This is useful when the frontend wants to maintain its own session IDs
-func (sm *SessionManager) MapWebSessionToClaude(webSessionID, claudeSessionID string) {
-	sm.sessions.Store(webSessionID, claudeSessionID)
-	log.Printf("Mapped web session %s to Claude session %s", webSessionID, claudeSessionID)
-}
-
-// GetClaudeSessionID gets the Claude session ID for a web session ID
-func (sm *SessionManager) GetClaudeSessionID(webSessionID string) (string, bool) {
-	value, ok := sm.sessions.Load(webSessionID)
-	if !ok {
-		return "", false
+// UpdateSessionID updates the session ID when SDK returns a new one after resume
+func (sm *SessionManager) UpdateSessionID(oldSessionID, newSessionID string) error {
+	if err := sm.db.UpdateSessionID(oldSessionID, newSessionID); err != nil {
+		return fmt.Errorf("failed to update session id: %w", err)
 	}
-	claudeSessionID, ok := value.(string)
-	return claudeSessionID, ok
-}
-
-// UnmapWebSession removes the mapping for a web session
-func (sm *SessionManager) UnmapWebSession(webSessionID string) {
-	sm.sessions.Delete(webSessionID)
-	log.Printf("Unmapped web session %s", webSessionID)
-}
-
-// GetOrCreateSession gets an existing session or creates a new one if the ID is empty
-func (sm *SessionManager) GetOrCreateSession(sessionID string) (string, bool, error) {
-	return sm.GetOrCreateSessionWithModel(sessionID, "haiku")
-}
-
-// GetOrCreateSessionWithModel gets an existing session or creates a new one with specified model
-// If sessionID is provided but doesn't exist, creates a new session with that ID
-func (sm *SessionManager) GetOrCreateSessionWithModel(sessionID string, model string) (string, bool, error) {
-	// If no session ID provided, create a new one with generated UUID
-	if sessionID == "" {
-		newSessionID, err := sm.CreateSessionWithModel(model)
-		if err != nil {
-			return "", false, fmt.Errorf("failed to create new session: %w", err)
-		}
-		return newSessionID, true, nil
-	}
-
-	// Check if session exists
-	exists := sm.SessionExists(sessionID)
-	if exists {
-		return sessionID, false, nil
-	}
-
-	// Session doesn't exist, create it with the provided ID
-	session, err := sm.db.CreateSessionWithModel(sessionID, model)
-	if err != nil {
-		return "", false, fmt.Errorf("failed to create session with ID %s: %w", sessionID, err)
-	}
-
-	log.Printf("SessionManager: Created new session %s with model %s", session.SessionID, model)
-	return session.SessionID, true, nil
+	return nil
 }
 
 // ListSessions returns all sessions ordered by last activity
@@ -183,32 +127,12 @@ func (sm *SessionManager) DeleteSession(sessionID string) error {
 	return nil
 }
 
-// UpdateClaudeSessionID updates the Claude CLI session ID for a session
-func (sm *SessionManager) UpdateClaudeSessionID(sessionID, claudeSessionID string) error {
-	if err := sm.db.UpdateClaudeSessionID(sessionID, claudeSessionID); err != nil {
-		return fmt.Errorf("failed to update claude session id: %w", err)
-	}
-	return nil
-}
-
 // UpdateSessionModel updates the model of a session
 func (sm *SessionManager) UpdateSessionModel(sessionID, model string) error {
 	if err := sm.db.UpdateSessionModel(sessionID, model); err != nil {
 		return fmt.Errorf("failed to update session model: %w", err)
 	}
 	return nil
-}
-
-// GetClaudeSessionIDFromDB gets the Claude session ID from the database
-func (sm *SessionManager) GetClaudeSessionIDFromDB(sessionID string) (string, error) {
-	session, err := sm.db.GetSession(sessionID)
-	if err != nil {
-		return "", fmt.Errorf("failed to get session: %w", err)
-	}
-	if session == nil {
-		return "", fmt.Errorf("session not found: %s", sessionID)
-	}
-	return session.ClaudeSessionID, nil
 }
 
 // GenerateTitle generates a title from the first user message (max 50 chars)

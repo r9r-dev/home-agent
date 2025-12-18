@@ -117,12 +117,9 @@ export async function updateSessionModel(sessionId: string, model: ClaudeModel):
 /**
  * Upload a file
  */
-export async function uploadFile(file: File, sessionId?: string): Promise<UploadedFile> {
+export async function uploadFile(file: File): Promise<UploadedFile> {
   const formData = new FormData();
   formData.append('file', file);
-  if (sessionId) {
-    formData.append('session_id', sessionId);
-  }
 
   const response = await fetch(`${API_BASE}/upload`, {
     method: 'POST',
@@ -140,12 +137,8 @@ export async function uploadFile(file: File, sessionId?: string): Promise<Upload
 /**
  * Delete an uploaded file
  */
-export async function deleteUploadedFile(fileId: string, sessionId?: string): Promise<void> {
-  const url = sessionId
-    ? `${API_BASE}/uploads/${fileId}?session_id=${sessionId}`
-    : `${API_BASE}/uploads/${fileId}`;
-
-  const response = await fetch(url, {
+export async function deleteUploadedFile(fileId: string): Promise<void> {
+  const response = await fetch(`${API_BASE}/uploads/${fileId}`, {
     method: 'DELETE',
   });
 

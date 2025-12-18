@@ -95,18 +95,12 @@ var AllowedExtensions = map[string]string{
 // RegisterRoutes registers upload routes
 func (h *UploadHandler) RegisterRoutes(app *fiber.App) {
 	app.Post("/api/upload", h.HandleUpload)
-	app.Get("/api/uploads/:sessionId/:filename", h.ServeFile)
+	app.Get("/api/uploads/:filename", h.ServeFile)
 	app.Delete("/api/uploads/:id", h.DeleteFile)
 }
 
 // HandleUpload handles file upload requests
 func (h *UploadHandler) HandleUpload(c *fiber.Ctx) error {
-	// Get session ID from form (optional, will use "temp" if not provided)
-	sessionID := c.FormValue("session_id")
-	if sessionID == "" {
-		sessionID = "temp"
-	}
-
 	// Get the file from the request
 	file, err := c.FormFile("file")
 	if err != nil {
@@ -152,20 +146,18 @@ func (h *UploadHandler) HandleUpload(c *fiber.Ctx) error {
 	fileID := uuid.New().String()
 
 	// Create filename using full GUID + extension (avoid collisions)
-	// ext was already computed above for validation
 	safeFilename := fmt.Sprintf("%s%s", fileID, ext)
 
-	// Create session upload directory
-	sessionDir := filepath.Join(h.uploadDir, sessionID)
-	if err := os.MkdirAll(sessionDir, 0755); err != nil {
+	// Ensure upload directory exists
+	if err := os.MkdirAll(h.uploadDir, 0755); err != nil {
 		log.Printf("Failed to create upload directory: %v", err)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to save file",
 		})
 	}
 
-	// Full path for the file
-	filePath := filepath.Join(sessionDir, safeFilename)
+	// Full path for the file (directly in uploadDir, no session subdirectory)
+	filePath := filepath.Join(h.uploadDir, safeFilename)
 
 	// Save the file
 	if err := c.SaveFile(file, filePath); err != nil {
@@ -175,13 +167,13 @@ func (h *UploadHandler) HandleUpload(c *fiber.Ctx) error {
 		})
 	}
 
-	log.Printf("File uploaded: %s (session: %s, type: %s, size: %d)", safeFilename, sessionID, fileType, file.Size)
+	log.Printf("File uploaded: %s (type: %s, size: %d)", safeFilename, fileType, file.Size)
 
 	// Return upload response
 	return c.JSON(UploadResponse{
 		ID:       fileID,
 		Filename: file.Filename,
-		Path:     fmt.Sprintf("/api/uploads/%s/%s", sessionID, safeFilename),
+		Path:     fmt.Sprintf("/api/uploads/%s", safeFilename),
 		Type:     fileType,
 		Size:     file.Size,
 		MimeType: mimeType,
@@ -190,17 +182,16 @@ func (h *UploadHandler) HandleUpload(c *fiber.Ctx) error {
 
 // ServeFile serves uploaded files
 func (h *UploadHandler) ServeFile(c *fiber.Ctx) error {
-	sessionID := c.Params("sessionId")
 	filename := c.Params("filename")
 
 	// Sanitize path to prevent directory traversal
-	if strings.Contains(sessionID, "..") || strings.Contains(filename, "..") {
+	if strings.Contains(filename, "..") {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "Invalid path",
 		})
 	}
 
-	filePath := filepath.Join(h.uploadDir, sessionID, filename)
+	filePath := filepath.Join(h.uploadDir, filename)
 
 	// Check if file exists
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {
@@ -215,12 +206,9 @@ func (h *UploadHandler) ServeFile(c *fiber.Ctx) error {
 // DeleteFile deletes an uploaded file
 func (h *UploadHandler) DeleteFile(c *fiber.Ctx) error {
 	fileID := c.Params("id")
-	sessionID := c.Query("session_id", "temp")
 
 	// Find and delete the file
-	sessionDir := filepath.Join(h.uploadDir, sessionID)
-
-	files, err := os.ReadDir(sessionDir)
+	files, err := os.ReadDir(h.uploadDir)
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"error": "File not found",
@@ -230,7 +218,7 @@ func (h *UploadHandler) DeleteFile(c *fiber.Ctx) error {
 	for _, file := range files {
 		// Match files starting with the full UUID (format: uuid.ext)
 		if strings.HasPrefix(file.Name(), fileID) {
-			filePath := filepath.Join(sessionDir, file.Name())
+			filePath := filepath.Join(h.uploadDir, file.Name())
 			if err := os.Remove(filePath); err != nil {
 				log.Printf("Failed to delete file: %v", err)
 				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -272,8 +260,8 @@ func sanitizeFilename(filename string) string {
 }
 
 // GetFileContent reads and returns the content of a text file
-func (h *UploadHandler) GetFileContent(sessionID, filename string) ([]byte, error) {
-	filePath := filepath.Join(h.uploadDir, sessionID, filename)
+func (h *UploadHandler) GetFileContent(filename string) ([]byte, error) {
+	filePath := filepath.Join(h.uploadDir, filename)
 
 	file, err := os.Open(filePath)
 	if err != nil {

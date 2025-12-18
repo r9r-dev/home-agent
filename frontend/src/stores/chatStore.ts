@@ -35,12 +35,10 @@ export interface ChatState {
   currentThinking: string | null; // Current thinking content being streamed
 }
 
-// Generate initial sessionId for first conversation
-const initialSessionId = crypto.randomUUID();
-
+// Initial state - sessionId is null until SDK provides one
 const initialState: ChatState = {
   messages: [],
-  currentSessionId: initialSessionId,
+  currentSessionId: null,
   selectedModel: 'haiku',
   isConnected: false,
   isTyping: false,
@@ -164,14 +162,15 @@ function createChatStore() {
 
     /**
      * Clear all messages and reset model to default
-     * Generates a new sessionId for the next conversation
+     * SessionId will be set when SDK provides one
      */
     clearMessages: () => {
       update((state) => ({
         ...state,
         messages: [],
-        currentSessionId: crypto.randomUUID(),
+        currentSessionId: null,
         selectedModel: 'haiku',
+        currentThinking: null,
       }));
     },
 
@@ -271,12 +270,12 @@ function createChatStore() {
     },
 
     /**
-     * Reset the entire store with a new sessionId
+     * Reset the entire store
+     * SessionId will be set when SDK provides one
      */
     reset: () => {
       set({
         ...initialState,
-        currentSessionId: crypto.randomUUID(),
       });
     },
   };

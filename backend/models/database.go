@@ -440,6 +440,44 @@ func (db *DB) UpdateClaudeSessionID(sessionID, claudeSessionID string) error {
 	return nil
 }
 
+// UpdateSessionID updates the session_id of a session and all its messages
+// This is used when the SDK returns a new session_id after resume
+func (db *DB) UpdateSessionID(oldSessionID, newSessionID string) error {
+	tx, err := db.conn.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	// Update messages first (they reference session_id)
+	_, err = tx.Exec("UPDATE messages SET session_id = ? WHERE session_id = ?", newSessionID, oldSessionID)
+	if err != nil {
+		return fmt.Errorf("failed to update messages session_id: %w", err)
+	}
+
+	// Update session
+	result, err := tx.Exec("UPDATE sessions SET session_id = ? WHERE session_id = ?", newSessionID, oldSessionID)
+	if err != nil {
+		return fmt.Errorf("failed to update session_id: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return fmt.Errorf("session not found: %s", oldSessionID)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	log.Printf("Updated session ID: %s -> %s", oldSessionID, newSessionID)
+	return nil
+}
+
 // DeleteSession deletes a session and all its messages
 func (db *DB) DeleteSession(sessionID string) error {
 	// Delete messages first (foreign key)
