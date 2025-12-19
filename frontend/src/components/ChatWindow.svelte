@@ -140,7 +140,8 @@
       case 'tool_result':
       case 'tool_error':
         if (data.tool) {
-          chatStore.completeToolCall(data.tool.tool_use_id, data.toolOutput || '', data.isError || data.type === 'tool_error');
+          // Pass the final input from the tool result (SDK sends complete input here)
+          chatStore.completeToolCall(data.tool.tool_use_id, data.toolOutput || '', data.isError || data.type === 'tool_error', data.tool.input);
         }
         break;
 
@@ -239,22 +240,58 @@
         fetchToolCalls(sessionId),
       ]);
 
-      const messages = apiMessages.map((msg: ApiMessage) => ({
-        id: String(msg.id),
-        role: msg.role,
-        content: msg.content,
-        timestamp: new Date(msg.created_at),
-      }));
+      // Combine messages and tool calls to assign orderIndex based on chronological order
+      const allItems: { type: 'message' | 'tool'; timestamp: Date; data: unknown }[] = [];
 
-      // Convert tool call records to ToolCall format
-      const toolCalls = toolCallRecords.map((tc: ToolCallRecord) => ({
-        toolUseId: tc.tool_use_id,
-        toolName: tc.tool_name,
-        status: tc.status,
-        startTime: new Date(tc.created_at),
-        endTime: tc.completed_at ? new Date(tc.completed_at) : undefined,
-        // Don't load input/output here - lazy loading
-      }));
+      apiMessages.forEach((msg: ApiMessage) => {
+        allItems.push({
+          type: 'message',
+          timestamp: new Date(msg.created_at),
+          data: msg,
+        });
+      });
+
+      toolCallRecords.forEach((tc: ToolCallRecord) => {
+        allItems.push({
+          type: 'tool',
+          timestamp: new Date(tc.created_at),
+          data: tc,
+        });
+      });
+
+      // Sort by timestamp to get chronological order
+      allItems.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+
+      // Assign orderIndex based on sorted position
+      const messages = allItems
+        .filter((item) => item.type === 'message')
+        .map((item) => {
+          const msg = item.data as ApiMessage;
+          const orderIndex = allItems.indexOf(item);
+          return {
+            id: String(msg.id),
+            role: msg.role,
+            content: msg.content,
+            timestamp: new Date(msg.created_at),
+            orderIndex,
+          };
+        });
+
+      const toolCalls = allItems
+        .filter((item) => item.type === 'tool')
+        .map((item) => {
+          const tc = item.data as ToolCallRecord;
+          const orderIndex = allItems.indexOf(item);
+          return {
+            toolUseId: tc.tool_use_id,
+            toolName: tc.tool_name,
+            status: tc.status,
+            startTime: new Date(tc.created_at),
+            endTime: tc.completed_at ? new Date(tc.completed_at) : undefined,
+            orderIndex,
+            // Don't load input/output here - lazy loading
+          };
+        });
 
       chatStore.loadMessages(sessionId, messages, session.model as ClaudeModel);
       chatStore.loadToolCalls(toolCalls);

@@ -3,7 +3,7 @@
   import { marked } from 'marked';
   import hljs from 'highlight.js';
   import type { Message, MessageAttachment, FlowItem } from '../stores/chatStore';
-  import { currentThinking, unifiedFlow, runningToolCalls } from '../stores/chatStore';
+  import { currentThinking, currentThinkingOrderIndex, unifiedFlow } from '../stores/chatStore';
   import { ScrollArea } from "$lib/components/ui/scroll-area";
   import Icon from "@iconify/svelte";
   import ThinkingBlock from './ThinkingBlock.svelte';
@@ -175,7 +175,6 @@
     isTyping;
     $currentThinking;
     flow;
-    $runningToolCalls;
 
     // Run after render
     tick().then(() => {
@@ -185,6 +184,25 @@
       highlightCodeBlocks();
     });
   });
+
+  /**
+   * Check if streaming thinking should be shown before this item
+   * based on orderIndex comparison
+   */
+  function shouldShowThinkingBefore(itemOrderIndex: number): boolean {
+    if (!$currentThinking || $currentThinkingOrderIndex === null) return false;
+    return $currentThinkingOrderIndex < itemOrderIndex;
+  }
+
+  /**
+   * Check if streaming thinking should be shown at the end of the flow
+   */
+  function shouldShowThinkingAtEnd(): boolean {
+    if (!$currentThinking || $currentThinkingOrderIndex === null) return false;
+    if (flow.length === 0) return true;
+    const lastItem = flow[flow.length - 1];
+    return $currentThinkingOrderIndex >= lastItem.orderIndex;
+  }
 
   onMount(() => {
     // Add scroll listener to viewport
@@ -228,11 +246,13 @@
           {/if}
         {/if}
 
-        <!-- Streaming thinking: show before the last assistant message when streaming -->
-        {#if $currentThinking && item.type === 'message' && item.message?.role === 'assistant' && index === flow.length - 1}
-          <div class="self-start w-full max-w-[80%]">
-            <ThinkingBlock content={$currentThinking} isStreaming={isTyping} />
-          </div>
+        <!-- Streaming thinking: show before this item if its orderIndex comes after thinking's orderIndex -->
+        {#if index === 0 || !shouldShowThinkingBefore(flow[index - 1]?.orderIndex ?? 0)}
+          {#if shouldShowThinkingBefore(item.orderIndex) && $currentThinking}
+            <div class="self-start w-full max-w-[80%]">
+              <ThinkingBlock content={$currentThinking} isStreaming={isTyping} />
+            </div>
+          {/if}
         {/if}
 
         <!-- Historical thinking message -->
@@ -241,10 +261,10 @@
             <ThinkingBlock content={item.message.content} />
           </div>
 
-        <!-- Tool call block -->
+        <!-- Tool call block (now includes running tools inline) -->
         {:else if item.type === 'tool_call' && item.toolCall}
           <div class="self-start w-full max-w-[80%]">
-            <ToolCallBlock toolCall={item.toolCall} defaultExpanded={item.toolCall.status === 'running'} />
+            <ToolCallBlock toolCall={item.toolCall} />
           </div>
 
         <!-- User or assistant message -->
@@ -302,22 +322,10 @@
         {/if}
       {/each}
 
-      <!-- Streaming thinking: show at end if no assistant message to attach to -->
-      {#if $currentThinking}
-        {@const lastItem = flow[flow.length - 1]}
-        {#if !lastItem || lastItem.type !== 'message' || lastItem.message?.role !== 'assistant'}
-          <div class="self-start w-full max-w-[80%]">
-            <ThinkingBlock content={$currentThinking} isStreaming={isTyping} />
-          </div>
-        {/if}
-      {/if}
-
-      <!-- Running tool calls: show after streaming thinking -->
-      {#if $runningToolCalls.length > 0}
-        <div class="self-start w-full max-w-[80%] space-y-2">
-          {#each $runningToolCalls as toolCall (toolCall.toolUseId)}
-            <ToolCallBlock {toolCall} defaultExpanded={true} />
-          {/each}
+      <!-- Streaming thinking: show at end if orderIndex is >= all items -->
+      {#if shouldShowThinkingAtEnd() && $currentThinking}
+        <div class="self-start w-full max-w-[80%]">
+          <ThinkingBlock content={$currentThinking} isStreaming={isTyping} />
         </div>
       {/if}
 

@@ -15,19 +15,29 @@ const activeToolInputs = new Map<number, string>();
 const toolUseIdToIndex = new Map<string, number>();
 
 // System prompt for Home Agent
-const SYSTEM_PROMPT = `You are a system administrator assistant running on a home server infrastructure.
-You have access to the command line and can execute commands to help manage and monitor the systems.
-Your role is to help with:
-- Server administration and maintenance
-- Container management (Docker)
-- System monitoring and troubleshooting
-- Network configuration
-- Security audits and hardening
-- Backup and recovery operations
+const SYSTEM_PROMPT = `You are a helpful personal assistant named Halfred, running on the user's home server.
+You are here to help with ANY question or task the user might have.
 
-You are NOT in a development environment. You are managing production home infrastructure.
-Be careful with destructive commands and always confirm before making significant changes.
-Respond in the same language as the user.`;
+## Your capabilities
+You have access to various tools:
+- **Command line**: Execute bash commands on the home server
+- **Web search**: Search the internet for current information (weather, news, etc.)
+- **Web fetch**: Retrieve content from web pages
+- **File operations**: Read, write, and edit files
+
+## What you can help with
+- General questions (weather, facts, recommendations, etc.)
+- Home server administration and monitoring
+- Container management (Docker)
+- System troubleshooting
+- Network configuration
+- Any other task the user requests
+
+## Guidelines
+- For questions requiring current information (weather, news, etc.), use the WebSearch tool
+- Be careful with destructive commands and confirm before making significant changes
+- Respond in the same language as the user
+- Be concise but helpful`;
 
 // Model aliases supported by Claude Agent SDK
 function mapModel(model?: string): string {
@@ -74,10 +84,10 @@ export async function* executePrompt(
   // Build Agent SDK options
   const options: Options = {
     // Tools available to the agent
-    tools: ["Read", "Write", "Edit", "Bash", "Glob", "Grep"],
+    tools: ["Read", "Write", "Edit", "Bash", "Glob", "Grep", "WebSearch", "WebFetch"],
 
     // Auto-allow these tools
-    allowedTools: ["Read", "Write", "Edit", "Bash", "Glob", "Grep"],
+    allowedTools: ["Read", "Write", "Edit", "Bash", "Glob", "Grep", "WebSearch", "WebFetch"],
 
     // Permission mode - accept edits without prompting
     permissionMode: "acceptEdits",
@@ -255,6 +265,12 @@ function processMessage(message: SDKMessage, sessionId?: string): ProxyResponse 
       // Streaming delta content
       const event = message.event;
 
+      // Reset streaming flag on message_start - this indicates a new turn
+      // This allows subsequent thinking blocks to be captured after tool calls
+      if (event.type === "message_start") {
+        hasReceivedStreamContent = false;
+      }
+
       // Handle content_block_start for tool_use
       if (event.type === "content_block_start") {
         const contentBlock = (event as { type: "content_block_start"; index: number; content_block: { type: string; id?: string; name?: string; input?: Record<string, unknown> } }).content_block;
@@ -350,10 +366,13 @@ function processMessage(message: SDKMessage, sessionId?: string): ProxyResponse 
       };
 
     case "user":
-      // Check for tool results in user messages (SDK sends tool results as user messages with parent_tool_use_id)
+      // Check for tool results in user messages
+      // Tool results can be identified by:
+      // 1. parent_tool_use_id at message level (some SDK versions)
+      // 2. tool_result blocks in message.content (current SDK format)
       const userMessage = message as {
         type: "user";
-        parent_tool_use_id: string | null;
+        parent_tool_use_id?: string | null;
         message?: {
           content?: Array<{
             type: string;
@@ -364,66 +383,60 @@ function processMessage(message: SDKMessage, sessionId?: string): ProxyResponse 
         };
       };
 
-      // If this message has a parent_tool_use_id, it's a tool result
-      if (userMessage.parent_tool_use_id) {
-        const toolUseId = userMessage.parent_tool_use_id;
+      // Look for tool_result blocks in message content
+      if (userMessage.message?.content) {
+        for (const block of userMessage.message.content) {
+          if (block.type === "tool_result" && block.tool_use_id) {
+            const toolUseId = block.tool_use_id;
+            const isError = block.is_error || false;
+            let toolOutput = "";
 
-        // Extract tool result from message.content
-        let toolOutput = "";
-        let isError = false;
+            if (typeof block.content === "string") {
+              toolOutput = block.content;
+            } else if (Array.isArray(block.content)) {
+              // Content can be an array of text blocks
+              toolOutput = block.content
+                .filter((c) => c.type === "text" && c.text)
+                .map((c) => c.text)
+                .join("\n");
+            }
 
-        if (userMessage.message?.content) {
-          for (const block of userMessage.message.content) {
-            if (block.type === "tool_result" && block.tool_use_id === toolUseId) {
-              isError = block.is_error || false;
-              if (typeof block.content === "string") {
-                toolOutput = block.content;
-              } else if (Array.isArray(block.content)) {
-                // Content can be an array of text blocks
-                toolOutput = block.content
-                  .filter((c) => c.type === "text" && c.text)
-                  .map((c) => c.text)
-                  .join("\n");
+            // Get accumulated input for this tool call
+            const toolIndex = toolUseIdToIndex.get(toolUseId);
+            let accumulatedInput: Record<string, unknown> = {};
+            let toolName = "";
+
+            if (toolIndex !== undefined) {
+              // Parse accumulated input JSON
+              const inputJsonStr = activeToolInputs.get(toolIndex);
+              if (inputJsonStr) {
+                try {
+                  accumulatedInput = JSON.parse(inputJsonStr);
+                } catch {
+                  // If parsing fails, leave as empty object
+                }
               }
-              break;
+              // Get tool name from stored info
+              const toolInfo = activeToolCalls.get(toolIndex);
+              if (toolInfo) {
+                toolName = toolInfo.tool_name;
+              }
             }
+
+            console.log(`[SDK] Tool result for ${toolName} (${toolUseId}): error=${isError}, output_len=${toolOutput.length}`);
+
+            return {
+              type: isError ? "tool_error" : "tool_result",
+              tool: {
+                tool_use_id: toolUseId,
+                tool_name: toolName,
+                input: accumulatedInput,
+              },
+              tool_output: toolOutput,
+              is_error: isError,
+            };
           }
         }
-
-        // Get accumulated input for this tool call
-        const toolIndex = toolUseIdToIndex.get(toolUseId);
-        let accumulatedInput: Record<string, unknown> = {};
-        let toolName = "";
-
-        if (toolIndex !== undefined) {
-          // Parse accumulated input JSON
-          const inputJsonStr = activeToolInputs.get(toolIndex);
-          if (inputJsonStr) {
-            try {
-              accumulatedInput = JSON.parse(inputJsonStr);
-            } catch {
-              // If parsing fails, leave as empty object
-            }
-          }
-          // Get tool name from stored info
-          const toolInfo = activeToolCalls.get(toolIndex);
-          if (toolInfo) {
-            toolName = toolInfo.tool_name;
-          }
-        }
-
-        console.log(`[SDK] Tool result for ${toolName} (${toolUseId}): error=${isError}, output_len=${toolOutput.length}`);
-
-        return {
-          type: isError ? "tool_error" : "tool_result",
-          tool: {
-            tool_use_id: toolUseId,
-            tool_name: toolName,
-            input: accumulatedInput,
-          },
-          tool_output: toolOutput,
-          is_error: isError,
-        };
       }
       break;
 

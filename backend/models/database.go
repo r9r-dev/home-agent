@@ -124,7 +124,7 @@ func (db *DB) createTables() error {
 	CREATE TABLE IF NOT EXISTS messages (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		session_id TEXT NOT NULL,
-		role TEXT NOT NULL CHECK(role IN ('user', 'assistant')),
+		role TEXT NOT NULL CHECK(role IN ('user', 'assistant', 'thinking')),
 		content TEXT NOT NULL,
 		created_at DATETIME NOT NULL,
 		FOREIGN KEY (session_id) REFERENCES sessions(session_id) ON DELETE CASCADE
@@ -194,6 +194,90 @@ func (db *DB) createTables() error {
 	db.conn.Exec(alterTableTitle)
 	db.conn.Exec(alterTableClaudeSession)
 	db.conn.Exec(alterTableModel)
+
+	// Migration: update messages table to allow 'thinking' role
+	// SQLite doesn't support ALTER TABLE to modify CHECK constraints, so we need to recreate the table
+	if err := db.migrateMessagesTableForThinking(); err != nil {
+		log.Printf("Warning: failed to migrate messages table for thinking role: %v", err)
+	}
+
+	return nil
+}
+
+// migrateMessagesTableForThinking recreates the messages table to allow 'thinking' role
+func (db *DB) migrateMessagesTableForThinking() error {
+	// Check if migration is needed by trying to insert a thinking message
+	_, err := db.conn.Exec("INSERT INTO messages (session_id, role, content, created_at) VALUES ('__migration_test__', 'thinking', 'test', datetime('now'))")
+	if err == nil {
+		// Migration not needed, clean up test row
+		db.conn.Exec("DELETE FROM messages WHERE session_id = '__migration_test__'")
+		return nil
+	}
+
+	// If the error contains "CHECK constraint failed", we need to migrate
+	if err.Error() == "constraint failed: CHECK constraint failed: messages" ||
+	   err.Error() == "CHECK constraint failed: messages" {
+		log.Println("Migrating messages table to allow 'thinking' role...")
+
+		tx, err := db.conn.Begin()
+		if err != nil {
+			return fmt.Errorf("failed to begin transaction: %w", err)
+		}
+		defer tx.Rollback()
+
+		// Create new table with updated constraint
+		_, err = tx.Exec(`
+			CREATE TABLE IF NOT EXISTS messages_new (
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				session_id TEXT NOT NULL,
+				role TEXT NOT NULL CHECK(role IN ('user', 'assistant', 'thinking')),
+				content TEXT NOT NULL,
+				created_at DATETIME NOT NULL,
+				FOREIGN KEY (session_id) REFERENCES sessions(session_id) ON DELETE CASCADE
+			)
+		`)
+		if err != nil {
+			return fmt.Errorf("failed to create new messages table: %w", err)
+		}
+
+		// Copy data
+		_, err = tx.Exec(`
+			INSERT INTO messages_new (id, session_id, role, content, created_at)
+			SELECT id, session_id, role, content, created_at FROM messages
+		`)
+		if err != nil {
+			return fmt.Errorf("failed to copy messages data: %w", err)
+		}
+
+		// Drop old table
+		_, err = tx.Exec("DROP TABLE messages")
+		if err != nil {
+			return fmt.Errorf("failed to drop old messages table: %w", err)
+		}
+
+		// Rename new table
+		_, err = tx.Exec("ALTER TABLE messages_new RENAME TO messages")
+		if err != nil {
+			return fmt.Errorf("failed to rename messages table: %w", err)
+		}
+
+		// Recreate indexes
+		_, err = tx.Exec("CREATE INDEX IF NOT EXISTS idx_messages_session_id ON messages(session_id)")
+		if err != nil {
+			return fmt.Errorf("failed to create session_id index: %w", err)
+		}
+
+		_, err = tx.Exec("CREATE INDEX IF NOT EXISTS idx_messages_created_at ON messages(created_at)")
+		if err != nil {
+			return fmt.Errorf("failed to create created_at index: %w", err)
+		}
+
+		if err := tx.Commit(); err != nil {
+			return fmt.Errorf("failed to commit transaction: %w", err)
+		}
+
+		log.Println("Messages table migration completed successfully")
+	}
 
 	return nil
 }

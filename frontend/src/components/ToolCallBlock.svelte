@@ -2,6 +2,7 @@
   import Icon from '@iconify/svelte';
   import type { ToolCall } from '../stores/chatStore';
   import { fetchToolCallDetail } from '../services/api';
+  import { ScrollArea } from '$lib/components/ui/scroll-area';
 
   interface Props {
     toolCall: ToolCall;
@@ -92,20 +93,56 @@
     expanded = !expanded;
   }
 
-  // Use loaded detail, streaming inputJson, or fall back to toolCall data
-  function getInput(): string {
-    if (loadedDetail) return loadedDetail.input;
-    // Use streaming inputJson if available
-    if (toolCall.inputJson) {
+  // Get parsed input object for formatted display
+  function getParsedInput(): Record<string, unknown> | null {
+    if (loadedDetail) {
       try {
-        // Try to parse and pretty-print
-        const parsed = JSON.parse(toolCall.inputJson);
-        return JSON.stringify(parsed, null, 2);
+        return JSON.parse(loadedDetail.input);
       } catch {
-        // If not valid JSON yet (still streaming), show raw
-        return toolCall.inputJson;
+        return null;
       }
     }
+    if (toolCall.inputJson) {
+      try {
+        return JSON.parse(toolCall.inputJson);
+      } catch {
+        return null;
+      }
+    }
+    if (toolCall.input && Object.keys(toolCall.input).length > 0) {
+      return toolCall.input;
+    }
+    return null;
+  }
+
+  // Format field label for display
+  function formatLabel(key: string): string {
+    // Convert camelCase or snake_case to Title Case
+    return key
+      .replace(/_/g, ' ')
+      .replace(/([a-z])([A-Z])/g, '$1 $2')
+      .replace(/\b\w/g, (c) => c.toUpperCase());
+  }
+
+  // Check if a value should be displayed as code
+  function isCodeValue(key: string): boolean {
+    const codeKeys = ['command', 'pattern', 'code', 'query', 'file_path', 'path', 'url'];
+    return codeKeys.includes(key.toLowerCase());
+  }
+
+  // Format value for display
+  function formatValue(value: unknown): string {
+    if (typeof value === 'string') return value;
+    if (typeof value === 'boolean') return value ? 'Oui' : 'Non';
+    if (typeof value === 'number') return String(value);
+    if (value === null || value === undefined) return '-';
+    return JSON.stringify(value, null, 2);
+  }
+
+  // Get raw input string for fallback
+  function getRawInput(): string {
+    if (loadedDetail) return loadedDetail.input;
+    if (toolCall.inputJson) return toolCall.inputJson;
     if (toolCall.input && Object.keys(toolCall.input).length > 0) {
       return JSON.stringify(toolCall.input, null, 2);
     }
@@ -155,16 +192,40 @@
         <!-- Input -->
         <div>
           <span class="text-xs text-muted-foreground font-semibold">Input</span>
-          <pre
-            class="text-xs bg-muted/50 rounded p-2 overflow-x-auto mt-1 max-h-[150px] overflow-y-auto">{getInput()}</pre>
+          {#if getParsedInput() && Object.keys(getParsedInput() || {}).length > 0}
+            {@const parsedInput = getParsedInput()}
+            <div class="mt-1 space-y-1.5">
+              {#each Object.entries(parsedInput || {}) as [key, value]}
+                <div class="flex flex-col gap-0.5">
+                  <span class="text-[10px] uppercase tracking-wider text-muted-foreground/70 font-medium">
+                    {formatLabel(key)}
+                  </span>
+                  {#if isCodeValue(key)}
+                    <code class="text-xs bg-muted/50 rounded px-2 py-1 font-mono text-foreground break-all">
+                      {formatValue(value)}
+                    </code>
+                  {:else if typeof value === 'object' && value !== null}
+                    <pre class="text-xs bg-muted/50 rounded px-2 py-1 overflow-x-auto">{JSON.stringify(value, null, 2)}</pre>
+                  {:else}
+                    <span class="text-xs text-foreground/90">{formatValue(value)}</span>
+                  {/if}
+                </div>
+              {/each}
+            </div>
+          {:else}
+            <pre class="text-xs bg-muted/50 rounded p-2 overflow-x-auto mt-1 max-h-[150px] overflow-y-auto text-muted-foreground">{getRawInput()}</pre>
+          {/if}
         </div>
 
         <!-- Output (if completed) -->
         {#if getOutput()}
           <div>
             <span class="text-xs text-muted-foreground font-semibold">Output</span>
-            <pre
-              class="text-xs bg-muted/50 rounded p-2 overflow-x-auto mt-1 max-h-[200px] overflow-y-auto">{getOutput()}</pre>
+            <div class="mt-1 h-[200px] rounded bg-muted/50 flex flex-col">
+              <ScrollArea class="flex-1 min-h-0">
+                <pre class="text-xs p-2 whitespace-pre-wrap break-words">{getOutput()}</pre>
+              </ScrollArea>
+            </div>
           </div>
         {/if}
       {/if}

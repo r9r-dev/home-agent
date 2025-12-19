@@ -18,6 +18,7 @@ export interface Message {
   role: 'user' | 'assistant' | 'thinking';
   content: string;
   timestamp: Date;
+  orderIndex: number; // Global order index for chronological display
   attachments?: MessageAttachment[];
 }
 
@@ -35,6 +36,7 @@ export interface ToolCall {
   elapsedTimeSeconds?: number;
   startTime: Date;
   endTime?: Date;
+  orderIndex: number; // Global order index for chronological display
 }
 
 // Flow item types for unified message + tool call display
@@ -43,6 +45,7 @@ export type FlowItemType = 'message' | 'tool_call' | 'thinking';
 export interface FlowItem {
   type: FlowItemType;
   timestamp: Date;
+  orderIndex: number;
   message?: Message;
   toolCall?: ToolCall;
 }
@@ -57,7 +60,9 @@ export interface ChatState {
   responseCompleted: boolean; // Track if last response was completed (for paragraph separation)
   thinkingEnabled: boolean; // Extended thinking mode enabled
   currentThinking: string | null; // Current thinking content being streamed
+  currentThinkingOrderIndex: number | null; // Order index for current thinking block
   activeToolCalls: Map<string, ToolCall>; // Active tool calls keyed by toolUseId
+  orderCounter: number; // Global counter for ordering events chronologically
 }
 
 // Initial state - sessionId is null until SDK provides one
@@ -71,7 +76,9 @@ const initialState: ChatState = {
   responseCompleted: false,
   thinkingEnabled: false,
   currentThinking: null,
+  currentThinkingOrderIndex: null,
   activeToolCalls: new Map(),
+  orderCounter: 0,
 };
 
 /**
@@ -93,11 +100,13 @@ function createChatStore() {
           role,
           content,
           timestamp: new Date(),
+          orderIndex: state.orderCounter,
           attachments,
         };
         return {
           ...state,
           messages: [...state.messages, newMessage],
+          orderCounter: state.orderCounter + 1,
         };
       });
     },
@@ -121,7 +130,13 @@ function createChatStore() {
             role: 'assistant',
             content,
             timestamp: new Date(),
+            orderIndex: state.orderCounter,
           });
+          return {
+            ...state,
+            messages,
+            orderCounter: state.orderCounter + 1,
+          };
         } else {
           // Update existing assistant message
           messages[messages.length - 1] = {
@@ -149,25 +164,43 @@ function createChatStore() {
             role: 'assistant',
             content: chunk,
             timestamp: new Date(),
+            orderIndex: state.orderCounter,
           };
           return {
             ...state,
             messages: [newMessage],
             responseCompleted: false,
+            orderCounter: state.orderCounter + 1,
           };
         }
 
         const messages = [...state.messages];
         const lastMessage = messages[messages.length - 1];
 
-        if (lastMessage.role !== 'assistant') {
+        // Check if there's a tool call with higher orderIndex than last assistant message
+        // If so, we need to create a new message instead of appending
+        const lastAssistantMessage = [...messages].reverse().find(m => m.role === 'assistant');
+        const hasToolCallAfterLastAssistant = lastAssistantMessage
+          ? Array.from(state.activeToolCalls.values()).some(
+              tc => tc.orderIndex > lastAssistantMessage.orderIndex
+            )
+          : false;
+
+        if (lastMessage.role !== 'assistant' || hasToolCallAfterLastAssistant) {
           // Create new assistant message
           messages.push({
             id: crypto.randomUUID(),
             role: 'assistant',
             content: chunk,
             timestamp: new Date(),
+            orderIndex: state.orderCounter,
           });
+          return {
+            ...state,
+            messages,
+            responseCompleted: false,
+            orderCounter: state.orderCounter + 1,
+          };
         } else {
           // Append to existing assistant message
           // Add paragraph separator if previous response was completed
@@ -176,13 +209,12 @@ function createChatStore() {
             ...lastMessage,
             content: lastMessage.content + separator + chunk,
           };
+          return {
+            ...state,
+            messages,
+            responseCompleted: false,
+          };
         }
-
-        return {
-          ...state,
-          messages,
-          responseCompleted: false,
-        };
       });
     },
 
@@ -197,6 +229,8 @@ function createChatStore() {
         currentSessionId: null,
         selectedModel: 'haiku',
         currentThinking: null,
+        currentThinkingOrderIndex: null,
+        orderCounter: 0,
       }));
     },
 
@@ -204,12 +238,20 @@ function createChatStore() {
      * Load messages from an existing session
      */
     loadMessages: (sessionId: string, loadedMessages: Message[], model?: ClaudeModel) => {
-      update((state) => ({
-        ...state,
-        messages: loadedMessages,
-        currentSessionId: sessionId,
-        selectedModel: model || state.selectedModel,
-      }));
+      update((state) => {
+        // Calculate the next orderCounter based on max orderIndex
+        const maxOrderIndex = loadedMessages.reduce(
+          (max, msg) => Math.max(max, msg.orderIndex ?? 0),
+          0
+        );
+        return {
+          ...state,
+          messages: loadedMessages,
+          currentSessionId: sessionId,
+          selectedModel: model || state.selectedModel,
+          orderCounter: Math.max(state.orderCounter, maxOrderIndex + 1),
+        };
+      });
     },
 
     /**
@@ -277,12 +319,19 @@ function createChatStore() {
 
     /**
      * Append content to current thinking
+     * Captures orderIndex when starting a new thinking block
      */
     appendToThinking: (chunk: string) => {
-      update((state) => ({
-        ...state,
-        currentThinking: (state.currentThinking || '') + chunk,
-      }));
+      update((state) => {
+        // If this is the start of a new thinking block, capture the orderIndex
+        const isNewBlock = state.currentThinking === null;
+        return {
+          ...state,
+          currentThinking: (state.currentThinking || '') + chunk,
+          currentThinkingOrderIndex: isNewBlock ? state.orderCounter : state.currentThinkingOrderIndex,
+          orderCounter: isNewBlock ? state.orderCounter + 1 : state.orderCounter,
+        };
+      });
     },
 
     /**
@@ -292,6 +341,7 @@ function createChatStore() {
       update((state) => ({
         ...state,
         currentThinking: null,
+        currentThinkingOrderIndex: null,
       }));
     },
 
@@ -307,8 +357,9 @@ function createChatStore() {
           input,
           status: 'running',
           startTime: new Date(),
+          orderIndex: state.orderCounter,
         });
-        return { ...state, activeToolCalls: newMap };
+        return { ...state, activeToolCalls: newMap, orderCounter: state.orderCounter + 1 };
       });
     },
 
@@ -342,15 +393,24 @@ function createChatStore() {
     },
 
     /**
-     * Complete a tool call with output
+     * Complete a tool call with output and final input
      */
-    completeToolCall: (toolUseId: string, output: string, isError: boolean) => {
+    completeToolCall: (toolUseId: string, output: string, isError: boolean, finalInput?: Record<string, unknown>) => {
       update((state) => {
         const newMap = new Map(state.activeToolCalls);
         const tool = newMap.get(toolUseId);
         if (tool) {
+          // Update input if provided and current input is empty
+          const updatedInput = (finalInput && Object.keys(finalInput).length > 0) ? finalInput : tool.input;
+          // Also update inputJson if we have finalInput and inputJson is empty
+          const updatedInputJson = (finalInput && Object.keys(finalInput).length > 0 && !tool.inputJson)
+            ? JSON.stringify(finalInput, null, 2)
+            : tool.inputJson;
+
           newMap.set(toolUseId, {
             ...tool,
+            input: updatedInput,
+            inputJson: updatedInputJson,
             output,
             status: isError ? 'error' : 'success',
             endTime: new Date(),
@@ -366,10 +426,14 @@ function createChatStore() {
     loadToolCalls: (toolCalls: ToolCall[]) => {
       update((state) => {
         const newMap = new Map<string, ToolCall>();
+        let maxOrderIndex = state.orderCounter;
         for (const tc of toolCalls) {
           newMap.set(tc.toolUseId, tc);
+          if (tc.orderIndex !== undefined) {
+            maxOrderIndex = Math.max(maxOrderIndex, tc.orderIndex + 1);
+          }
         }
-        return { ...state, activeToolCalls: newMap };
+        return { ...state, activeToolCalls: newMap, orderCounter: maxOrderIndex };
       });
     },
 
@@ -410,47 +474,41 @@ export const activeToolCalls = derived(chatStore, ($store) =>
   Array.from($store.activeToolCalls.values())
 );
 
-// Unified flow combining messages and COMPLETED tool calls in chronological order
-// Running tool calls are excluded and displayed separately after streaming thinking
+// Unified flow combining messages and ALL tool calls in chronological order by orderIndex
+// This includes running tool calls inline (not separately at the bottom)
 export const unifiedFlow = derived(chatStore, ($store): FlowItem[] => {
   const items: FlowItem[] = [];
 
-  // Add messages (excluding thinking which we handle separately)
+  // Add messages
   for (const msg of $store.messages) {
-    if (msg.role === 'thinking') {
-      items.push({
-        type: 'thinking',
-        timestamp: msg.timestamp,
-        message: msg,
-      });
-    } else {
-      items.push({
-        type: 'message',
-        timestamp: msg.timestamp,
-        message: msg,
-      });
-    }
+    items.push({
+      type: msg.role === 'thinking' ? 'thinking' : 'message',
+      timestamp: msg.timestamp,
+      orderIndex: msg.orderIndex,
+      message: msg,
+    });
   }
 
-  // Add only COMPLETED tool calls (not running)
-  // Running tool calls are displayed separately after streaming thinking
+  // Add ALL tool calls (including running ones) - they will appear inline
   for (const toolCall of $store.activeToolCalls.values()) {
-    if (toolCall.status !== 'running') {
-      items.push({
-        type: 'tool_call',
-        timestamp: toolCall.startTime,
-        toolCall,
-      });
-    }
+    items.push({
+      type: 'tool_call',
+      timestamp: toolCall.startTime,
+      orderIndex: toolCall.orderIndex,
+      toolCall,
+    });
   }
 
-  // Sort by timestamp
-  items.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+  // Sort by orderIndex for correct chronological order
+  items.sort((a, b) => a.orderIndex - b.orderIndex);
 
   return items;
 });
 
-// Running tool calls (displayed separately after streaming thinking)
+// Running tool calls (for status tracking, but they're now displayed inline via unifiedFlow)
 export const runningToolCalls = derived(chatStore, ($store) =>
   Array.from($store.activeToolCalls.values()).filter(tc => tc.status === 'running')
 );
+
+// Current thinking order index (for positioning streaming thinking correctly)
+export const currentThinkingOrderIndex = derived(chatStore, ($store) => $store.currentThinkingOrderIndex);

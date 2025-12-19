@@ -333,6 +333,7 @@ func (ch *ChatHandler) processClaudeResponse(oldSessionID string, isNewConversat
 		case "tool_result", "tool_error":
 			log.Printf("[Chat] Received %s for tool %s", claudeResp.Type, claudeResp.Tool.ToolUseID)
 			// Update tool call in database with input and result
+			var inputMap map[string]interface{}
 			if claudeResp.Tool != nil {
 				status := "success"
 				if claudeResp.IsError || claudeResp.Type == "tool_error" {
@@ -340,6 +341,7 @@ func (ch *ChatHandler) processClaudeResponse(oldSessionID string, isNewConversat
 				}
 				// Convert input map to JSON string
 				inputJSON, _ := json.Marshal(claudeResp.Tool.Input)
+				inputMap = claudeResp.Tool.Input
 				log.Printf("[Chat] Tool %s input: %s", claudeResp.Tool.ToolUseID, string(inputJSON))
 				err := ch.db.UpdateToolCallOutput(claudeResp.Tool.ToolUseID, string(inputJSON), claudeResp.ToolOutput, status)
 				if err != nil {
@@ -347,12 +349,13 @@ func (ch *ChatHandler) processClaudeResponse(oldSessionID string, isNewConversat
 				}
 			}
 
-			// Forward to client
+			// Forward to client (include input for frontend to display)
 			var toolInfo *ToolInfo
 			if claudeResp.Tool != nil {
 				toolInfo = &ToolInfo{
 					ToolUseID: claudeResp.Tool.ToolUseID,
 					ToolName:  claudeResp.Tool.ToolName,
+					Input:     inputMap,
 				}
 			}
 			responseChan <- MessageResponse{
