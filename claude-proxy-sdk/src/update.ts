@@ -285,6 +285,12 @@ export async function updateBackend(
 /**
  * Update the proxy SDK
  * Note: This will trigger a service restart, so the WebSocket connection will be lost
+ *
+ * Update process (no sudo required):
+ * 1. Clone repo to temp directory
+ * 2. Copy claude-proxy-sdk files to install dir (writable by service user)
+ * 3. Run npm install && npm run build
+ * 4. Exit process (systemd will restart the service)
  */
 export async function updateProxy(
   onLog: LogCallback,
@@ -293,37 +299,108 @@ export async function updateProxy(
   onStatus("running");
   onLog(createLog("Starting proxy SDK update...", "proxy"));
 
+  const INSTALL_DIR = "/opt/claude-proxy-sdk";
+
   try {
-    // The install.sh script handles everything:
-    // - Stops the service
-    // - Downloads new code
-    // - Builds
-    // - Restarts the service
+    // Step 1: Create temp directory and clone
+    onLog(createLog("Downloading latest version...", "proxy"));
 
-    // Method 1: Direct execution of install.sh (requires sudo)
-    onLog(createLog("Downloading and running install script...", "proxy"));
-
-    // We use bash -c to run the curl | bash pattern
-    const result = await executeCommand(
-      "bash",
-      [
-        "-c",
-        `curl -fsSL https://raw.githubusercontent.com/${GITHUB_REPO}/main/claude-proxy-sdk/install.sh | sudo bash`,
-      ],
+    const mkdirResult = await executeCommand(
+      "mktemp",
+      ["-d"],
       { source: "proxy", onLog }
     );
 
-    if (!result.success) {
-      onLog(createLog(`Update failed: ${result.error}`, "proxy", "error"));
-      onStatus("error", result.error);
+    // Get temp dir from stdout (captured in the command)
+    const tmpDir = "/tmp/claude-proxy-update-" + Date.now();
+    await executeCommand("mkdir", ["-p", tmpDir], { source: "proxy", onLog });
+
+    // Clone with sparse checkout
+    const cloneResult = await executeCommand(
+      "git",
+      ["clone", "--depth", "1", "--filter=blob:none", "--sparse", `https://github.com/${GITHUB_REPO}.git`, `${tmpDir}/repo`],
+      { source: "proxy", onLog }
+    );
+
+    if (!cloneResult.success) {
+      onLog(createLog(`Clone failed: ${cloneResult.error}`, "proxy", "error"));
+      onStatus("error", cloneResult.error);
+      await executeCommand("rm", ["-rf", tmpDir], { source: "proxy", onLog });
+      return;
+    }
+
+    // Set sparse checkout
+    await executeCommand(
+      "git",
+      ["-C", `${tmpDir}/repo`, "sparse-checkout", "set", "claude-proxy-sdk"],
+      { source: "proxy", onLog }
+    );
+
+    // Step 2: Copy files to install directory
+    onLog(createLog("Installing new version...", "proxy"));
+
+    // Remove old files (except node_modules to speed up npm install)
+    await executeCommand(
+      "bash",
+      ["-c", `find ${INSTALL_DIR} -mindepth 1 -maxdepth 1 ! -name 'node_modules' -exec rm -rf {} +`],
+      { source: "proxy", onLog }
+    );
+
+    // Copy new files
+    const copyResult = await executeCommand(
+      "bash",
+      ["-c", `cp -r ${tmpDir}/repo/claude-proxy-sdk/* ${INSTALL_DIR}/`],
+      { source: "proxy", onLog }
+    );
+
+    if (!copyResult.success) {
+      onLog(createLog(`Copy failed: ${copyResult.error}`, "proxy", "error"));
+      onStatus("error", copyResult.error);
+      await executeCommand("rm", ["-rf", tmpDir], { source: "proxy", onLog });
+      return;
+    }
+
+    // Cleanup temp directory
+    await executeCommand("rm", ["-rf", tmpDir], { source: "proxy", onLog });
+
+    // Step 3: Install dependencies and build
+    onLog(createLog("Installing dependencies...", "proxy"));
+
+    const npmInstallResult = await executeCommand(
+      "npm",
+      ["install"],
+      { cwd: INSTALL_DIR, source: "proxy", onLog }
+    );
+
+    if (!npmInstallResult.success) {
+      onLog(createLog(`npm install failed: ${npmInstallResult.error}`, "proxy", "error"));
+      onStatus("error", npmInstallResult.error);
+      return;
+    }
+
+    onLog(createLog("Building TypeScript...", "proxy"));
+
+    const buildResult = await executeCommand(
+      "npm",
+      ["run", "build"],
+      { cwd: INSTALL_DIR, source: "proxy", onLog }
+    );
+
+    if (!buildResult.success) {
+      onLog(createLog(`Build failed: ${buildResult.error}`, "proxy", "error"));
+      onStatus("error", buildResult.error);
       return;
     }
 
     onLog(createLog("Proxy SDK update completed successfully", "proxy"));
-    onLog(createLog("Service is restarting...", "proxy"));
+    onLog(createLog("Restarting service...", "proxy"));
     onStatus("success");
 
-    // Note: The service will restart, so this process will be terminated
+    // Step 4: Exit to trigger systemd restart
+    setTimeout(() => {
+      process.exit(0);
+    }, 1000);
+
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
     onLog(createLog(`Update failed: ${message}`, "proxy", "error"));

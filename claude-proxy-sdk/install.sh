@@ -132,6 +132,10 @@ download_source() {
     mkdir -p "${INSTALL_DIR}"
     cp -r claude-proxy-sdk/* "${INSTALL_DIR}/"
 
+    # Make directory writable by service user for self-updates
+    local run_user="${SUDO_USER:-root}"
+    chown -R "${run_user}:${run_user}" "${INSTALL_DIR}"
+
     success "Source code installed"
 }
 

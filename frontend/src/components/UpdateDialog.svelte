@@ -25,6 +25,28 @@
 
   let { open = $bindable(false) }: Props = $props();
 
+  // Refs for auto-scroll
+  let backendViewport = $state<HTMLElement | null>(null);
+  let proxyViewport = $state<HTMLElement | null>(null);
+
+  // Auto-scroll when logs change
+  $effect(() => {
+    if ($backendLogs.length > 0 && backendViewport) {
+      // Use setTimeout to ensure DOM is updated
+      setTimeout(() => {
+        backendViewport!.scrollTop = backendViewport!.scrollHeight;
+      }, 0);
+    }
+  });
+
+  $effect(() => {
+    if ($proxyLogs.length > 0 && proxyViewport) {
+      setTimeout(() => {
+        proxyViewport!.scrollTop = proxyViewport!.scrollHeight;
+      }, 0);
+    }
+  });
+
   function handleStartUpdate() {
     updateStore.startUpdate();
   }
@@ -153,7 +175,7 @@
                 <span class="ml-auto w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span>
               {/if}
             </div>
-            <ScrollArea class="flex-1 min-h-0">
+            <ScrollArea class="flex-1 min-h-0" bind:viewportRef={backendViewport}>
               <div class="p-3 font-mono text-xs bg-[#1a1a1a] min-h-full">
                 {#if $backendLogs.length === 0}
                   <span class="text-muted-foreground">En attente...</span>
@@ -178,7 +200,7 @@
                 <span class="ml-auto w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span>
               {/if}
             </div>
-            <ScrollArea class="flex-1 min-h-0">
+            <ScrollArea class="flex-1 min-h-0" bind:viewportRef={proxyViewport}>
               <div class="p-3 font-mono text-xs bg-[#1a1a1a] min-h-full">
                 {#if $proxyLogs.length === 0}
                   <span class="text-muted-foreground">En attente...</span>
