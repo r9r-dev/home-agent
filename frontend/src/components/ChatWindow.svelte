@@ -12,11 +12,14 @@
   import Sidebar from './Sidebar.svelte';
   import SettingsDialog from './SettingsDialog.svelte';
   import MemoryDialog from './MemoryDialog.svelte';
+  import UpdateDialog from './UpdateDialog.svelte';
   import LogIndicator from './LogIndicator.svelte';
   import LogPanel from './LogPanel.svelte';
+  import { updateAvailable } from '../stores/updateStore';
   import { Badge } from "$lib/components/ui/badge";
-  import * as Alert from "$lib/components/ui/alert";
   import * as Menubar from "$lib/components/ui/menubar";
+  import { Toaster } from "$lib/components/ui/sonner";
+  import { toast } from "svelte-sonner";
   import Icon from "@iconify/svelte";
 
   // App version (injected by Vite from package.json)
@@ -28,6 +31,7 @@
   // Dialog states
   let settingsDialogOpen = $state(false);
   let memoryDialogOpen = $state(false);
+  let updateDialogOpen = $state(false);
   let logPanelOpen = $state(false);
 
   // Model options
@@ -112,7 +116,9 @@
 
       case 'error':
         chatStore.setTyping(false);
-        chatStore.setError(data.message || data.error || 'An error occurred');
+        const errorMessage = data.message || data.error || 'Une erreur est survenue';
+        chatStore.setError(errorMessage);
+        toast.error('Erreur', { description: errorMessage });
         break;
 
       case 'session':
@@ -171,7 +177,9 @@
     chatStore.setTyping(false);
 
     if (event.code !== 1000) {
-      chatStore.setError('Connection lost. Attempting to reconnect...');
+      toast.error('Connexion perdue', {
+        description: 'Tentative de reconnexion...',
+      });
     }
   }
 
@@ -180,7 +188,9 @@
    */
   function handleWebSocketError(error: Event) {
     console.error('[ChatWindow] WebSocket error:', error);
-    chatStore.setError('Connection error. Please check your network.');
+    toast.error('Erreur de connexion', {
+      description: 'Veuillez verifier votre reseau.',
+    });
   }
 
   // Reference to InputBox for focus management
@@ -221,7 +231,9 @@
       chatStore.setError(null);
     } catch (error) {
       console.error('[ChatWindow] Failed to send message:', error);
-      chatStore.setError('Failed to send message. Please try again.');
+      toast.error('Erreur d\'envoi', {
+        description: 'Impossible d\'envoyer le message. Veuillez reessayer.',
+      });
     }
   }
 
@@ -301,7 +313,9 @@
       chatStore.setError(null);
     } catch (error) {
       console.error('[ChatWindow] Failed to load session:', error);
-      chatStore.setError('Failed to load conversation');
+      toast.error('Erreur de chargement', {
+        description: 'Impossible de charger la conversation.',
+      });
     }
   }
 
@@ -323,19 +337,7 @@
     }
   });
 
-  /**
-   * Get connection status display
-   */
-  let connectionStatus = $derived.by(() => {
-    if ($chatStore.error) {
-      return { text: 'Erreur', color: 'destructive' as const };
-    }
-    if ($chatStore.isConnected) {
-      return { text: 'Connecté', color: 'default' as const };
-    }
-    return { text: 'Connexion...', color: 'secondary' as const };
-  });
-
+  
   /**
    * Lifecycle: mount
    */
@@ -438,44 +440,35 @@
               </Menubar.Content>
             </Menubar.Menu>
 
-            <!-- Host Menu -->
+            <!-- Systeme Menu -->
             <Menubar.Menu>
-              <Menubar.Trigger class="text-sm font-normal">Host</Menubar.Trigger>
+              <Menubar.Trigger class="text-sm font-normal flex items-center gap-1.5">
+                Systeme
+                {#if $updateAvailable}
+                  <span class="update-notification-dot"></span>
+                {/if}
+              </Menubar.Trigger>
               <Menubar.Content>
-                <Menubar.Item disabled>
-                  <Icon icon="mynaui:download" class="size-4 mr-2" />
-                  Mettre a jour Claude Code
+                <Menubar.Item onclick={() => settingsDialogOpen = true}>
+                  <Icon icon="mynaui:cog" class="size-4 mr-2" />
+                  Parametres
+                </Menubar.Item>
+                <Menubar.Separator />
+                <Menubar.Item onclick={() => updateDialogOpen = true}>
+                  <Icon icon="mynaui:refresh" class="size-4 mr-2" />
+                  Mises a jour
+                  {#if $updateAvailable}
+                    <Badge class="ml-auto text-[10px] px-1.5 py-0 h-4 bg-green-600 hover:bg-green-600 text-white">Nouveau</Badge>
+                  {/if}
                 </Menubar.Item>
               </Menubar.Content>
-            </Menubar.Menu>
-
-            <!-- Parametres Menu -->
-            <Menubar.Menu>
-              <Menubar.Trigger class="text-sm font-normal" onclick={() => settingsDialogOpen = true}>
-                Parametres
-              </Menubar.Trigger>
             </Menubar.Menu>
           </Menubar.Root>
 
           <LogIndicator onclick={() => logPanelOpen = true} />
-
-          <Badge
-            variant="outline"
-            class="gap-2 px-3 py-1.5 bg-black text-white border-black"
-          >
-            <span class="w-1.5 h-1.5 rounded-full {connectionStatus.color === 'destructive' ? 'bg-red-500' : connectionStatus.color === 'default' ? 'bg-green-500' : 'bg-gray-400'}"></span>
-            {connectionStatus.text}
-          </Badge>
         </div>
       </div>
     </header>
-
-    {#if chatState.error}
-      <Alert.Root variant="destructive" class="rounded-none border-x-0 border-t-0">
-        <Icon icon="mynaui:danger-circle" class="size-4" />
-        <Alert.Description>{chatState.error}</Alert.Description>
-      </Alert.Root>
-    {/if}
 
     <MessageList messages={chatState.messages} isTyping={chatState.isTyping} />
 
@@ -493,5 +486,11 @@
 <!-- Memory Dialog -->
 <MemoryDialog bind:open={memoryDialogOpen} />
 
+<!-- Update Dialog -->
+<UpdateDialog bind:open={updateDialogOpen} />
+
 <!-- Log Panel -->
 <LogPanel bind:open={logPanelOpen} />
+
+<!-- Toast notifications -->
+<Toaster position="bottom-right" richColors />
