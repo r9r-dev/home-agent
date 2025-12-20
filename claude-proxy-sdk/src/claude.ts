@@ -267,10 +267,14 @@ function processMessage(message: SDKMessage, ctx: ExecutionContext, sessionId?: 
       // Streaming delta content
       const event = message.event;
 
-      // Reset streaming flag on message_start - this indicates a new turn
-      // This allows subsequent thinking blocks to be captured after tool calls
+      // Reset context on message_start - this indicates a new assistant turn
+      // Block indices reset for each new message, so we need to clear our mappings
+      // to avoid correlating with stale data from previous turns
       if (event.type === "message_start") {
         ctx.hasReceivedStreamContent = false;
+        ctx.activeToolCalls.clear();
+        ctx.activeToolInputs.clear();
+        ctx.toolUseIdToIndex.clear();
       }
 
       // Handle content_block_start for tool_use
