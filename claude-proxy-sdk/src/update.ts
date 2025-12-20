@@ -286,11 +286,13 @@ export async function updateBackend(
  * Update the proxy SDK
  * Note: This will trigger a service restart, so the WebSocket connection will be lost
  *
- * Update process (no sudo required):
+ * Update process:
  * 1. Clone repo to temp directory
- * 2. Copy claude-proxy-sdk files to install dir (writable by service user)
- * 3. Run npm install && npm run build
+ * 2. Copy claude-proxy-sdk files to install dir (requires sudo)
+ * 3. Run npm install && npm run build (requires sudo)
  * 4. Exit process (systemd will restart the service)
+ *
+ * Requires: sudoers config for the service user to run bash, npm without password
  */
 export async function updateProxy(
   onLog: LogCallback,
@@ -343,14 +345,14 @@ export async function updateProxy(
     await executeCommand(
       "bash",
       ["-c", `find ${INSTALL_DIR} -mindepth 1 -maxdepth 1 ! -name 'node_modules' -exec rm -rf {} +`],
-      { source: "proxy", onLog }
+      { source: "proxy", onLog, sudo: true }
     );
 
     // Copy new files
     const copyResult = await executeCommand(
       "bash",
       ["-c", `cp -r ${tmpDir}/repo/claude-proxy-sdk/* ${INSTALL_DIR}/`],
-      { source: "proxy", onLog }
+      { source: "proxy", onLog, sudo: true }
     );
 
     if (!copyResult.success) {
@@ -369,7 +371,7 @@ export async function updateProxy(
     const npmInstallResult = await executeCommand(
       "npm",
       ["install"],
-      { cwd: INSTALL_DIR, source: "proxy", onLog }
+      { cwd: INSTALL_DIR, source: "proxy", onLog, sudo: true }
     );
 
     if (!npmInstallResult.success) {
@@ -383,7 +385,7 @@ export async function updateProxy(
     const buildResult = await executeCommand(
       "npm",
       ["run", "build"],
-      { cwd: INSTALL_DIR, source: "proxy", onLog }
+      { cwd: INSTALL_DIR, source: "proxy", onLog, sudo: true }
     );
 
     if (!buildResult.success) {
