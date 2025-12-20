@@ -106,6 +106,11 @@
         }
         break;
 
+      case 'thinking_end':
+        // Finalize the current thinking block and convert it to a message
+        chatStore.finalizeThinking();
+        break;
+
       case 'done':
         chatStore.setTyping(false);
         // Keep thinking content visible after response completes
@@ -125,6 +130,13 @@
       case 'session_id':
         if (data.sessionId) {
           chatStore.setSessionId(data.sessionId);
+        }
+        break;
+
+      case 'session_title':
+        // Title was generated for this session, refresh sidebar
+        if (sidebar) {
+          sidebar.refresh();
         }
         break;
 

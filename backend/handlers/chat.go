@@ -63,9 +63,10 @@ type ToolInfo struct {
 
 // MessageResponse represents a response chunk sent to the client
 type MessageResponse struct {
-	Type      string `json:"type"`       // "chunk", "thinking", "done", "error", "session_id", "tool_start", "tool_progress", "tool_result", "tool_error", "tool_input_delta"
+	Type      string `json:"type"`       // "chunk", "thinking", "thinking_end", "done", "error", "session_id", "session_title", "tool_start", "tool_progress", "tool_result", "tool_error", "tool_input_delta"
 	Content   string `json:"content,omitempty"`
 	SessionID string `json:"session_id,omitempty"`
+	Title     string `json:"title,omitempty"` // Session title for session_title type
 	Error     string `json:"error,omitempty"`
 	// Tool-specific fields
 	Tool               *ToolInfo `json:"tool,omitempty"`
@@ -171,15 +172,44 @@ func (ch *ChatHandler) HandleMessage(ctx context.Context, request MessageRequest
 // userContent: the user message content to save (with attachment markers)
 // userMessage: the original user message (for title generation)
 func (ch *ChatHandler) processClaudeResponse(oldSessionID string, isNewConversation bool, model string, userContent string, userMessage string, claudeResponseChan <-chan services.ClaudeResponse, responseChan chan<- MessageResponse) {
-	defer close(responseChan)
+	// Note: We don't defer close here because we need to send session_title after done
+	// The channel will be closed at the end of this function
 
 	var fullAssistantResponse strings.Builder
-	var fullThinkingContent strings.Builder
+	var currentThinkingContent strings.Builder // Current thinking block being accumulated
 	var currentSessionID string = oldSessionID
+	var pendingTitleGeneration bool = false
+	var titleUserMessage, titleAssistantMessage string
+	var wasThinking bool = false // Track if we were receiving thinking content
+
+	// Helper function to finalize current thinking block
+	finalizeThinkingBlock := func() {
+		if currentThinkingContent.Len() > 0 {
+			thinkingContent := currentThinkingContent.String()
+			// Send thinking_end to client
+			responseChan <- MessageResponse{
+				Type: "thinking_end",
+			}
+			// Save thinking content to database
+			if currentSessionID != "" {
+				if err := ch.sessionManager.SaveMessage(currentSessionID, "thinking", thinkingContent); err != nil {
+					ch.logService.Error(fmt.Sprintf("Failed to save thinking message: %v", err))
+				}
+			}
+			// Reset the thinking content builder
+			currentThinkingContent.Reset()
+		}
+		wasThinking = false
+	}
 
 	for claudeResp := range claudeResponseChan {
 		switch claudeResp.Type {
 		case "chunk":
+			// If we were thinking, finalize that block first
+			if wasThinking {
+				finalizeThinkingBlock()
+			}
+
 			// Accumulate the full response
 			fullAssistantResponse.WriteString(claudeResp.Content)
 
@@ -191,7 +221,8 @@ func (ch *ChatHandler) processClaudeResponse(oldSessionID string, isNewConversat
 
 		case "thinking":
 			// Accumulate thinking content
-			fullThinkingContent.WriteString(claudeResp.Content)
+			currentThinkingContent.WriteString(claudeResp.Content)
+			wasThinking = true
 
 			// Send thinking content to client
 			responseChan <- MessageResponse{
@@ -237,12 +268,9 @@ func (ch *ChatHandler) processClaudeResponse(oldSessionID string, isNewConversat
 			}
 
 		case "done":
-			// Save thinking content to database (before assistant message)
-			thinkingMessage := fullThinkingContent.String()
-			if thinkingMessage != "" {
-				if err := ch.sessionManager.SaveMessage(currentSessionID, "thinking", thinkingMessage); err != nil {
-					ch.logService.Error(fmt.Sprintf("Failed to save thinking message: %v", err))
-				}
+			// Finalize any pending thinking block
+			if wasThinking {
+				finalizeThinkingBlock()
 			}
 
 			// Save assistant's full response to database
@@ -260,18 +288,11 @@ func (ch *ChatHandler) processClaudeResponse(oldSessionID string, isNewConversat
 				Content:   assistantMessage,
 			}
 
-			// Generate a summary title for new sessions (async, don't block)
+			// Mark for title generation (will be done after the loop)
 			if isNewConversation && assistantMessage != "" {
-				sessionForTitle := currentSessionID
-				go func() {
-					title, err := ch.claudeExecutor.GenerateTitleSummary(userMessage, assistantMessage)
-					if err != nil {
-						return
-					}
-					if title != "" {
-						ch.sessionManager.UpdateSessionTitle(sessionForTitle, title)
-					}
-				}()
+				pendingTitleGeneration = true
+				titleUserMessage = userMessage
+				titleAssistantMessage = assistantMessage
 			}
 
 		case "error":
@@ -283,6 +304,11 @@ func (ch *ChatHandler) processClaudeResponse(oldSessionID string, isNewConversat
 			return
 
 		case "tool_start":
+			// If we were thinking, finalize that block first
+			if wasThinking {
+				finalizeThinkingBlock()
+			}
+
 			log.Printf("[Chat] Received tool_start: %s (%s)", claudeResp.Tool.ToolName, claudeResp.Tool.ToolUseID)
 			// Create tool call in database
 			if claudeResp.Tool != nil && currentSessionID != "" {
@@ -375,6 +401,23 @@ func (ch *ChatHandler) processClaudeResponse(oldSessionID string, isNewConversat
 			}
 		}
 	}
+
+	// Generate title after the response is complete (before closing channel)
+	if pendingTitleGeneration {
+		title, err := ch.claudeExecutor.GenerateTitleSummary(titleUserMessage, titleAssistantMessage)
+		if err == nil && title != "" {
+			ch.sessionManager.UpdateSessionTitle(currentSessionID, title)
+			// Send session_title to client so they can update the sidebar
+			responseChan <- MessageResponse{
+				Type:      "session_title",
+				SessionID: currentSessionID,
+				Title:     title,
+			}
+		}
+	}
+
+	// Close the channel now that we're done
+	close(responseChan)
 }
 
 // GetHistory retrieves the conversation history for a session

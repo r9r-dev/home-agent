@@ -116,19 +116,22 @@ Session Management Refactor (v0.16.0):
 - File uploads no longer use session subdirectories: `/workspace/uploads/{uuid}.ext`
 - Frontend starts with `null` session ID, receives it from backend after first message
 
-Thinking Mode Feature (v0.15.0, Issue #6):
+Thinking Mode Feature (v0.15.0, Issue #6, updated v0.19.0):
 - **Extended Thinking**: Display Claude's internal reasoning process
   - Toggle "Mode Thinking" in Claude menu to enable
   - When enabled, passes `--thinking` flag to Claude CLI
   - Thinking blocks displayed in collapsible UI with amber styling
   - Thinking content streams in real-time, stays visible after response
-  - Persisted to database with role "thinking"
+  - **Multiple thinking blocks**: When Claude thinks, uses a tool, then thinks again, each block is displayed separately in chronological order (not concatenated)
+  - Persisted to database with role "thinking" (each block saved separately)
 - Key files:
   - `frontend/src/components/ThinkingBlock.svelte` - Collapsible thinking display
-  - `frontend/src/stores/chatStore.ts` - `thinkingEnabled`, `currentThinking` state
-  - `backend/handlers/chat.go` - Handles `thinking` response type
+  - `frontend/src/stores/chatStore.ts` - `thinkingEnabled`, `currentThinking` state, `finalizeThinking()` action
+  - `backend/handlers/chat.go` - Handles `thinking` and `thinking_end` response types, detects thinking block boundaries
   - `claude-proxy-sdk/src/claude.ts` - Handles thinking events from Claude Agent SDK
-- WebSocket message type: `{"type": "thinking", "content": "..."}`
+- WebSocket message types:
+  - `{"type": "thinking", "content": "..."}` - Streaming thinking content
+  - `{"type": "thinking_end"}` - Signals end of current thinking block (sent before tool_start or chunk)
 
 Tool Calls Display Feature (Issue #4):
 - **Tool Call Visualization**: Display Claude's tool usage inline in message flow
@@ -243,6 +246,17 @@ System Update Feature (v0.18.0):
   - `POST /api/update/proxy` - Start proxy update
   - `GET /ws/update` - WebSocket for update logs
 
+Bug Fixes (v0.19.0):
+- **Fixed**: Chat title now updates in sidebar automatically (no page refresh needed)
+  - Backend sends `session_title` WebSocket message after title generation
+  - Frontend refreshes sidebar when receiving the title update
+- **Fixed**: Multiple thinking blocks now display correctly in chronological order
+  - Previously, when Claude thought -> used tool -> thought again, all content was concatenated into one block
+  - Now each thinking block is saved and displayed separately with its own order index
+  - Backend detects thinking block boundaries (when receiving tool_start or chunk after thinking)
+  - New WebSocket message type `thinking_end` signals block completion
+  - Frontend `finalizeThinking()` action converts streaming content to message
+
 **Custom Component Modifications (re-apply after shadcn-svelte updates):**
 - `scroll-area.svelte`: Add `type = "always"` prop (default) for always-visible scrollbar
 - `scroll-area-scrollbar.svelte`: Custom classes for visible scrollbar:
@@ -328,8 +342,10 @@ Attachments format:
 ```json
 {"type": "chunk", "content": "..."}      // Streaming response
 {"type": "thinking", "content": "..."}   // Thinking content (when thinking mode enabled)
+{"type": "thinking_end"}                 // End of current thinking block (v0.19.0)
 {"type": "done", "sessionId": "..."}     // Response complete
 {"type": "session_id", "sessionId": "..."}  // New session created
+{"type": "session_title", "sessionId": "...", "title": "..."}  // Session title generated (v0.19.0)
 {"type": "error", "error": "..."}        // Error occurred
 // Tool call events
 {"type": "tool_start", "tool": {"tool_use_id": "...", "tool_name": "...", "input": {...}}}

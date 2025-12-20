@@ -42,9 +42,10 @@ type ClientMessage struct {
 
 // ServerMessage represents a message sent to the WebSocket client
 type ServerMessage struct {
-	Type      string `json:"type"`                // "chunk", "thinking", "done", "error", "pong", "history", "session_id", "tool_start", "tool_progress", "tool_result", "tool_error"
+	Type      string `json:"type"`                // "chunk", "thinking", "thinking_end", "done", "error", "pong", "history", "session_id", "session_title", "tool_start", "tool_progress", "tool_result", "tool_error"
 	Content   string `json:"content,omitempty"`   // Message content
 	SessionID string `json:"sessionId,omitempty"` // Session ID
+	Title     string `json:"title,omitempty"`     // Session title (for session_title type)
 	Error     string `json:"error,omitempty"`     // Error message
 	Messages  []MessageResponse `json:"messages,omitempty"` // History messages
 	// Tool-specific fields
@@ -192,6 +193,11 @@ func (wsh *WebSocketHandler) handleChatMessage(c *websocket.Conn, clientMsg Clie
 				Content: response.Content,
 			}
 
+		case "thinking_end":
+			serverMsg = ServerMessage{
+				Type: "thinking_end",
+			}
+
 		case "session_id":
 			serverMsg = ServerMessage{
 				Type:      "session_id",
@@ -203,6 +209,13 @@ func (wsh *WebSocketHandler) handleChatMessage(c *websocket.Conn, clientMsg Clie
 				Type:      "done",
 				SessionID: response.SessionID,
 				Content:   response.Content,
+			}
+
+		case "session_title":
+			serverMsg = ServerMessage{
+				Type:      "session_title",
+				SessionID: response.SessionID,
+				Title:     response.Title,
 			}
 
 		case "error":

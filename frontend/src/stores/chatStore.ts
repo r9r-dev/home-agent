@@ -346,6 +346,35 @@ function createChatStore() {
     },
 
     /**
+     * Finalize current thinking content by converting it to a message
+     * Called when thinking_end is received from backend
+     */
+    finalizeThinking: () => {
+      update((state) => {
+        if (!state.currentThinking) {
+          return state;
+        }
+
+        // Create a new thinking message from the accumulated content
+        const thinkingMessage: Message = {
+          id: crypto.randomUUID(),
+          role: 'thinking',
+          content: state.currentThinking,
+          timestamp: new Date(),
+          orderIndex: state.currentThinkingOrderIndex ?? state.orderCounter,
+        };
+
+        return {
+          ...state,
+          messages: [...state.messages, thinkingMessage],
+          currentThinking: null,
+          currentThinkingOrderIndex: null,
+          // Don't increment orderCounter here since we already captured it when thinking started
+        };
+      });
+    },
+
+    /**
      * Start a new tool call
      */
     startToolCall: (toolUseId: string, toolName: string, input?: Record<string, unknown>) => {
