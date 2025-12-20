@@ -12,6 +12,8 @@
   import Sidebar from './Sidebar.svelte';
   import SettingsDialog from './SettingsDialog.svelte';
   import MemoryDialog from './MemoryDialog.svelte';
+  import LogIndicator from './LogIndicator.svelte';
+  import LogPanel from './LogPanel.svelte';
   import { Badge } from "$lib/components/ui/badge";
   import * as Alert from "$lib/components/ui/alert";
   import * as Menubar from "$lib/components/ui/menubar";
@@ -26,6 +28,7 @@
   // Dialog states
   let settingsDialogOpen = $state(false);
   let memoryDialogOpen = $state(false);
+  let logPanelOpen = $state(false);
 
   // Model options
   const models: { value: ClaudeModel; label: string }[] = [
@@ -454,6 +457,8 @@
             </Menubar.Menu>
           </Menubar.Root>
 
+          <LogIndicator onclick={() => logPanelOpen = true} />
+
           <Badge
             variant="outline"
             class="gap-2 px-3 py-1.5 bg-black text-white border-black"
@@ -487,3 +492,6 @@
 
 <!-- Memory Dialog -->
 <MemoryDialog bind:open={memoryDialogOpen} />
+
+<!-- Log Panel -->
+<LogPanel bind:open={logPanelOpen} />

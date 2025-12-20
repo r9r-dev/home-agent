@@ -21,16 +21,18 @@ type ChatHandler struct {
 	uploadDir      string // Local path for file storage
 	workspacePath  string // Path prefix for Claude CLI (if different from uploadDir)
 	db             *models.DB
+	logService     *services.LogService
 }
 
 // NewChatHandler creates a new ChatHandler instance
-func NewChatHandler(sessionManager *services.SessionManager, claudeExecutor services.ClaudeExecutor, uploadDir string, workspacePath string, db *models.DB) *ChatHandler {
+func NewChatHandler(sessionManager *services.SessionManager, claudeExecutor services.ClaudeExecutor, uploadDir string, workspacePath string, db *models.DB, logService *services.LogService) *ChatHandler {
 	return &ChatHandler{
 		sessionManager: sessionManager,
 		claudeExecutor: claudeExecutor,
 		uploadDir:      uploadDir,
 		workspacePath:  workspacePath,
 		db:             db,
+		logService:     logService,
 	}
 }
 
@@ -205,6 +207,7 @@ func (ch *ChatHandler) processClaudeResponse(oldSessionID string, isNewConversat
 				// New conversation: create session with SDK's session_id
 				_, err := ch.sessionManager.CreateSessionWithID(sdkSessionID, model)
 				if err != nil {
+					ch.logService.Error(fmt.Sprintf("Failed to create session: %v", err))
 					responseChan <- MessageResponse{
 						Type:  "error",
 						Error: fmt.Sprintf("failed to create session: %v", err),
@@ -212,15 +215,16 @@ func (ch *ChatHandler) processClaudeResponse(oldSessionID string, isNewConversat
 					return
 				}
 				// Save user message now that we have a session
-				ch.sessionManager.SaveMessage(sdkSessionID, "user", userContent)
+				if err := ch.sessionManager.SaveMessage(sdkSessionID, "user", userContent); err != nil {
+					ch.logService.Error(fmt.Sprintf("Failed to save user message: %v", err))
+				}
 				currentSessionID = sdkSessionID
 			} else {
 				// Resume: update session_id if it changed
 				if sdkSessionID != oldSessionID {
 					err := ch.sessionManager.UpdateSessionID(oldSessionID, sdkSessionID)
 					if err != nil {
-						// Log error but continue - messages were already saved with old ID
-						fmt.Printf("Warning: failed to update session ID: %v\n", err)
+						ch.logService.Warning(fmt.Sprintf("Failed to update session ID: %v", err))
 					}
 					currentSessionID = sdkSessionID
 				}
@@ -236,13 +240,17 @@ func (ch *ChatHandler) processClaudeResponse(oldSessionID string, isNewConversat
 			// Save thinking content to database (before assistant message)
 			thinkingMessage := fullThinkingContent.String()
 			if thinkingMessage != "" {
-				ch.sessionManager.SaveMessage(currentSessionID, "thinking", thinkingMessage)
+				if err := ch.sessionManager.SaveMessage(currentSessionID, "thinking", thinkingMessage); err != nil {
+					ch.logService.Error(fmt.Sprintf("Failed to save thinking message: %v", err))
+				}
 			}
 
 			// Save assistant's full response to database
 			assistantMessage := fullAssistantResponse.String()
 			if assistantMessage != "" {
-				ch.sessionManager.SaveMessage(currentSessionID, "assistant", assistantMessage)
+				if err := ch.sessionManager.SaveMessage(currentSessionID, "assistant", assistantMessage); err != nil {
+					ch.logService.Error(fmt.Sprintf("Failed to save assistant message: %v", err))
+				}
 			}
 
 			// Send done signal to client
@@ -267,6 +275,7 @@ func (ch *ChatHandler) processClaudeResponse(oldSessionID string, isNewConversat
 			}
 
 		case "error":
+			ch.logService.Error(fmt.Sprintf("Claude error: %v", claudeResp.Error))
 			responseChan <- MessageResponse{
 				Type:  "error",
 				Error: claudeResp.Error.Error(),

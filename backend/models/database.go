@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -214,9 +215,10 @@ func (db *DB) migrateMessagesTableForThinking() error {
 		return nil
 	}
 
-	// If the error contains "CHECK constraint failed", we need to migrate
-	if err.Error() == "constraint failed: CHECK constraint failed: messages" ||
-	   err.Error() == "CHECK constraint failed: messages" {
+	// If the error contains "CHECK constraint", we need to migrate
+	// Use Contains for robustness across different SQLite driver versions
+	errStr := strings.ToLower(err.Error())
+	if strings.Contains(errStr, "check") && strings.Contains(errStr, "constraint") {
 		log.Println("Migrating messages table to allow 'thinking' role...")
 
 		tx, err := db.conn.Begin()

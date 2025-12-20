@@ -189,6 +189,34 @@ Navigation & Memory Feature (v0.13.0):
   - `GET /api/memory/export` - Export JSON
   - `POST /api/memory/import` - Import JSON
 
+Real-time Logs Feature (v0.17.0):
+- **Log Indicator**: Visual indicator in header showing application health
+  - Green: No issues (info level only)
+  - Orange: Warnings detected
+  - Red: Errors detected
+  - Badge shows unread log count
+- **Log Panel**: Click indicator to view logs in dialog
+  - Scrollable list with colored entries by level
+  - Timestamps in French format
+  - "Effacer les indicateurs" button to reset status
+- **In-memory buffer**: Last 100 log entries (not persisted)
+- **Real-time streaming**: WebSocket connection for instant updates
+- **Captured events**:
+  - Database errors (message save failures, session creation)
+  - Claude proxy errors
+  - Session management warnings
+- Key files:
+  - `backend/services/logservice.go` - In-memory log buffer with subscribers
+  - `backend/handlers/logs.go` - REST and WebSocket endpoints
+  - `frontend/src/stores/logStore.ts` - Log state management
+  - `frontend/src/components/LogIndicator.svelte` - Header indicator button
+  - `frontend/src/components/LogPanel.svelte` - Log viewer dialog
+- Endpoints:
+  - `GET /api/logs` - Get all logs and current status
+  - `GET /api/logs/status` - Get status only (for polling)
+  - `POST /api/logs/clear` - Clear warning/error indicators
+  - `GET /ws/logs` - WebSocket for real-time log streaming
+
 **Custom Component Modifications (re-apply after shadcn-svelte updates):**
 - `scroll-area.svelte`: Add `type = "always"` prop (default) for always-visible scrollbar
 - `scroll-area-scrollbar.svelte`: Custom classes for visible scrollbar:
@@ -202,14 +230,16 @@ Key directories:
 - `src/services/` - API and WebSocket clients
 
 ### Backend Key Files
-- `main.go` - HTTP server, routes, middleware, initializes ProxyClaudeExecutor
+- `main.go` - HTTP server, routes, middleware, initializes ProxyClaudeExecutor and LogService
 - `handlers/websocket.go` - WebSocket upgrade and message routing
-- `handlers/chat.go` - Message processing, coordinates Claude service and session management, memory injection
+- `handlers/chat.go` - Message processing, coordinates Claude service and session management, memory injection, error logging
 - `handlers/upload.go` - File upload endpoint, serves uploaded files, validates MIME types
 - `handlers/memory.go` - Memory CRUD API endpoints
+- `handlers/logs.go` - Real-time logs REST and WebSocket endpoints
 - `services/claude_executor.go` - Interface definition, shared types (ClaudeResponse, MemoryEntry), system prompt
 - `services/proxy_claude_executor.go` - Proxy executor (remote execution via WebSocket to Claude Proxy SDK)
 - `services/session.go` - Session CRUD, manages session IDs from Claude Agent SDK
+- `services/logservice.go` - In-memory log buffer with real-time subscriber notifications
 - `models/database.go` - SQLite schema with migrations, memory table and CRUD
 
 ### ClaudeExecutor Interface
@@ -304,6 +334,10 @@ Attachments format:
 - `POST /api/memory/import` - Import memory entries (body: `{"entries": [...]}`)
 - `GET /api/sessions/:id/tool-calls` - List tool calls for session (metadata only)
 - `GET /api/tool-calls/:tool_use_id` - Get full tool call detail (for lazy loading)
+- `GET /api/logs` - Get all logs and current status
+- `GET /api/logs/status` - Get log status only (info/warning/error)
+- `POST /api/logs/clear` - Clear warning/error indicators
+- `GET /ws/logs` - WebSocket for real-time log streaming
 
 ## Environment Variables
 

@@ -118,6 +118,7 @@ func main() {
 
 	// Initialize services
 	sessionManager := services.NewSessionManager(db)
+	logService := services.NewLogService(100) // Keep last 100 log entries
 
 	// Validate required configuration
 	if config.ClaudeProxyURL == "" {
@@ -137,10 +138,11 @@ func main() {
 	}
 
 	// Initialize handlers
-	chatHandler := handlers.NewChatHandler(sessionManager, claudeExecutor, config.UploadDir, config.WorkspacePath, db)
+	chatHandler := handlers.NewChatHandler(sessionManager, claudeExecutor, config.UploadDir, config.WorkspacePath, db, logService)
 	wsHandler := handlers.NewWebSocketHandler(chatHandler)
 	uploadHandler := handlers.NewUploadHandler(config.UploadDir)
 	memoryHandler := handlers.NewMemoryHandler(db)
+	logHandler := handlers.NewLogHandler(logService)
 
 	// Create Fiber app
 	app := fiber.New(fiber.Config{
@@ -315,6 +317,12 @@ func main() {
 
 	// Register memory routes
 	memoryHandler.RegisterRoutes(app)
+
+	// Register log routes
+	logHandler.RegisterRoutes(app)
+
+	// Log startup
+	logService.Info("Home Agent started")
 
 	// Serve static files from public directory (for frontend)
 	// This should be last so WebSocket and API routes take precedence
