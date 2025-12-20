@@ -9,6 +9,7 @@
 import Fastify from "fastify";
 import { registerWebSocket } from "./websocket.js";
 import { generateTitle } from "./claude.js";
+import { checkForUpdates, updateBackend, updateProxy, type LogEntry } from "./update.js";
 import type { ProxyConfig } from "./types.js";
 
 // Load configuration from environment
@@ -93,8 +94,98 @@ async function main() {
     }
   });
 
-  // Register WebSocket handler
-  registerWebSocket(app, config.apiKey);
+  // Update check endpoint
+  app.get("/api/update/check", async (request, reply) => {
+    // Check API key if configured
+    if (config.apiKey) {
+      const providedKey = request.headers["x-api-key"];
+      if (providedKey !== config.apiKey) {
+        return reply.status(401).send({ error: "Unauthorized" });
+      }
+    }
+
+    try {
+      const status = await checkForUpdates();
+      return status;
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Failed to check for updates";
+      console.error(`Update check error: ${errorMessage}`);
+      return reply.status(500).send({ error: errorMessage });
+    }
+  });
+
+  // Store for active update WebSocket connections
+  const updateClients = new Set<import("@fastify/websocket").WebSocket>();
+
+  // Update backend endpoint
+  app.post("/api/update/backend", async (request, reply) => {
+    // Check API key if configured
+    if (config.apiKey) {
+      const providedKey = request.headers["x-api-key"];
+      if (providedKey !== config.apiKey) {
+        return reply.status(401).send({ error: "Unauthorized" });
+      }
+    }
+
+    // Start update in background and stream logs to all connected WebSocket clients
+    updateBackend(
+      (entry: LogEntry) => {
+        const message = JSON.stringify({ type: "update_log", ...entry });
+        for (const client of updateClients) {
+          if (client.readyState === 1) { // OPEN
+            client.send(message);
+          }
+        }
+      },
+      (status, error) => {
+        const message = JSON.stringify({ type: "update_status", target: "backend", status, error });
+        for (const client of updateClients) {
+          if (client.readyState === 1) {
+            client.send(message);
+          }
+        }
+      }
+    );
+
+    return { started: true, message: "Backend update started. Watch WebSocket for logs." };
+  });
+
+  // Update proxy endpoint
+  app.post("/api/update/proxy", async (request, reply) => {
+    // Check API key if configured
+    if (config.apiKey) {
+      const providedKey = request.headers["x-api-key"];
+      if (providedKey !== config.apiKey) {
+        return reply.status(401).send({ error: "Unauthorized" });
+      }
+    }
+
+    // Start update in background
+    updateProxy(
+      (entry: LogEntry) => {
+        const message = JSON.stringify({ type: "update_log", ...entry });
+        for (const client of updateClients) {
+          if (client.readyState === 1) {
+            client.send(message);
+          }
+        }
+      },
+      (status, error) => {
+        const message = JSON.stringify({ type: "update_log", source: "proxy", status, error });
+        for (const client of updateClients) {
+          if (client.readyState === 1) {
+            client.send(message);
+          }
+        }
+      }
+    );
+
+    return { started: true, message: "Proxy update started. Service will restart." };
+  });
+
+// Register WebSocket handler (includes plugin registration)
+  registerWebSocket(app, config.apiKey, updateClients);
 
   // Graceful shutdown
   const signals: NodeJS.Signals[] = ["SIGINT", "SIGTERM"];

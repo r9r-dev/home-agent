@@ -7,12 +7,17 @@ import { query, type Options, type SDKMessage, type PreToolUseHookInput, type Po
 import type { ProxyRequest, ProxyResponse, ToolCallInfo } from "./types.js";
 import { auditLog } from "./hooks/audit.js";
 
-// Track active tool calls by index (for correlating content blocks)
-const activeToolCalls = new Map<number, ToolCallInfo>();
-// Track accumulated input JSON strings by tool index
-const activeToolInputs = new Map<number, string>();
-// Map tool_use_id to index for correlating results
-const toolUseIdToIndex = new Map<string, number>();
+// Execution context for tracking tool calls within a single execution
+interface ExecutionContext {
+  // Track active tool calls by index (for correlating content blocks)
+  activeToolCalls: Map<number, ToolCallInfo>;
+  // Track accumulated input JSON strings by tool index
+  activeToolInputs: Map<number, string>;
+  // Map tool_use_id to index for correlating results
+  toolUseIdToIndex: Map<string, number>;
+  // Track if we've received streaming content to avoid duplicates
+  hasReceivedStreamContent: boolean;
+}
 
 // System prompt for Home Agent
 const SYSTEM_PROMPT = `You are a helpful personal assistant named Halfred, running on the user's home server.
@@ -69,11 +74,13 @@ export async function* executePrompt(
     thinking,
   } = request;
 
-  // Reset state at the beginning of each execution
-  hasReceivedStreamContent = false;
-  activeToolCalls.clear();
-  activeToolInputs.clear();
-  toolUseIdToIndex.clear();
+  // Create execution context local to this request
+  const ctx: ExecutionContext = {
+    activeToolCalls: new Map(),
+    activeToolInputs: new Map(),
+    toolUseIdToIndex: new Map(),
+    hasReceivedStreamContent: false,
+  };
 
   // Build system prompt with custom instructions
   let systemPrompt = SYSTEM_PROMPT;
@@ -168,7 +175,7 @@ export async function* executePrompt(
       // Debug: log ALL raw SDK messages to understand the protocol
       console.log(`[SDK RAW] ${JSON.stringify(message).substring(0, 500)}`);
 
-      const response = processMessage(message, session_id);
+      const response = processMessage(message, ctx, session_id);
 
       if (response) {
         // Debug: log response being sent
@@ -213,19 +220,14 @@ export async function* executePrompt(
 
 /**
  * Process an SDK message and convert to ProxyResponse
- * We track if we've received streaming content to avoid duplicates
+ * Uses execution context to track state for this specific execution
  */
-let hasReceivedStreamContent = false;
-
-function processMessage(message: SDKMessage, sessionId?: string): ProxyResponse | null {
+function processMessage(message: SDKMessage, ctx: ExecutionContext, sessionId?: string): ProxyResponse | null {
   switch (message.type) {
     case "system":
       if (message.subtype === "init") {
-        // Reset streaming flag and active tool calls for new session
-        hasReceivedStreamContent = false;
-        activeToolCalls.clear();
-        activeToolInputs.clear();
-        toolUseIdToIndex.clear();
+        // Reset streaming flag for new session (context is already fresh)
+        ctx.hasReceivedStreamContent = false;
         // Capture session ID from init message
         return {
           type: "session_id",
@@ -237,7 +239,7 @@ function processMessage(message: SDKMessage, sessionId?: string): ProxyResponse 
     case "assistant":
       // Skip full assistant message if we already streamed the content
       // This avoids duplicating the response
-      if (hasReceivedStreamContent) {
+      if (ctx.hasReceivedStreamContent) {
         break;
       }
       // Full assistant message (non-streaming fallback)
@@ -268,7 +270,7 @@ function processMessage(message: SDKMessage, sessionId?: string): ProxyResponse 
       // Reset streaming flag on message_start - this indicates a new turn
       // This allows subsequent thinking blocks to be captured after tool calls
       if (event.type === "message_start") {
-        hasReceivedStreamContent = false;
+        ctx.hasReceivedStreamContent = false;
       }
 
       // Handle content_block_start for tool_use
@@ -282,8 +284,8 @@ function processMessage(message: SDKMessage, sessionId?: string): ProxyResponse 
           };
           // Store for later correlation
           const index = (event as { index: number }).index;
-          activeToolCalls.set(index, toolInfo);
-          toolUseIdToIndex.set(contentBlock.id, index);
+          ctx.activeToolCalls.set(index, toolInfo);
+          ctx.toolUseIdToIndex.set(contentBlock.id, index);
 
           return {
             type: "tool_start",
@@ -299,13 +301,13 @@ function processMessage(message: SDKMessage, sessionId?: string): ProxyResponse 
         const blockIndex = eventWithIndex.index;
 
         if (delta.type === "text_delta" && "text" in delta) {
-          hasReceivedStreamContent = true;
+          ctx.hasReceivedStreamContent = true;
           return {
             type: "chunk",
             content: delta.text,
           };
         } else if (delta.type === "thinking_delta" && "thinking" in delta) {
-          hasReceivedStreamContent = true;
+          ctx.hasReceivedStreamContent = true;
           return {
             type: "thinking",
             content: delta.thinking as string,
@@ -313,11 +315,11 @@ function processMessage(message: SDKMessage, sessionId?: string): ProxyResponse 
         } else if (delta.type === "input_json_delta" && "partial_json" in delta) {
           // Accumulate input JSON delta
           const partialJson = delta.partial_json as string;
-          const currentInput = activeToolInputs.get(blockIndex) || "";
-          activeToolInputs.set(blockIndex, currentInput + partialJson);
+          const currentInput = ctx.activeToolInputs.get(blockIndex) || "";
+          ctx.activeToolInputs.set(blockIndex, currentInput + partialJson);
 
           // Get the tool info for this block
-          const toolInfo = activeToolCalls.get(blockIndex);
+          const toolInfo = ctx.activeToolCalls.get(blockIndex);
           if (toolInfo) {
             return {
               type: "tool_input_delta",
@@ -335,10 +337,10 @@ function processMessage(message: SDKMessage, sessionId?: string): ProxyResponse 
       // Handle content_block_stop - tool input is complete
       if (event.type === "content_block_stop") {
         const stopEvent = event as { type: "content_block_stop"; index: number };
-        const toolInfo = activeToolCalls.get(stopEvent.index);
+        const toolInfo = ctx.activeToolCalls.get(stopEvent.index);
         if (toolInfo) {
           // Parse the accumulated input
-          const inputJsonStr = activeToolInputs.get(stopEvent.index);
+          const inputJsonStr = ctx.activeToolInputs.get(stopEvent.index);
           if (inputJsonStr) {
             try {
               const parsedInput = JSON.parse(inputJsonStr);
@@ -402,13 +404,13 @@ function processMessage(message: SDKMessage, sessionId?: string): ProxyResponse 
             }
 
             // Get accumulated input for this tool call
-            const toolIndex = toolUseIdToIndex.get(toolUseId);
+            const toolIndex = ctx.toolUseIdToIndex.get(toolUseId);
             let accumulatedInput: Record<string, unknown> = {};
             let toolName = "";
 
             if (toolIndex !== undefined) {
               // Parse accumulated input JSON
-              const inputJsonStr = activeToolInputs.get(toolIndex);
+              const inputJsonStr = ctx.activeToolInputs.get(toolIndex);
               if (inputJsonStr) {
                 try {
                   accumulatedInput = JSON.parse(inputJsonStr);
@@ -417,7 +419,7 @@ function processMessage(message: SDKMessage, sessionId?: string): ProxyResponse 
                 }
               }
               // Get tool name from stored info
-              const toolInfo = activeToolCalls.get(toolIndex);
+              const toolInfo = ctx.activeToolCalls.get(toolIndex);
               if (toolInfo) {
                 toolName = toolInfo.tool_name;
               }
@@ -476,14 +478,17 @@ Reponse de l'assistant: ${truncatedAssistant}`;
   };
 
   let title = "";
+  let hasStreamedContent = false;
 
   for await (const message of query({ prompt, options })) {
     if (message.type === "stream_event") {
       const event = message.event;
       if (event.type === "content_block_delta" && event.delta.type === "text_delta" && "text" in event.delta) {
+        hasStreamedContent = true;
         title += event.delta.text;
       }
-    } else if (message.type === "assistant" && message.message?.content) {
+    } else if (message.type === "assistant" && message.message?.content && !hasStreamedContent) {
+      // Only use assistant message if we didn't receive streamed content
       const content = message.message.content;
       if (Array.isArray(content)) {
         for (const block of content) {

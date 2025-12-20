@@ -217,6 +217,32 @@ Real-time Logs Feature (v0.17.0):
   - `POST /api/logs/clear` - Clear warning/error indicators
   - `GET /ws/logs` - WebSocket for real-time log streaming
 
+System Update Feature (v0.18.0):
+- **Update Menu**: "Parametres" renamed to "Systeme" with submenus
+  - Green pulsing dot when update is available
+  - "Parametres" opens settings dialog
+  - "Mises a jour" opens update dialog with "Nouveau" badge
+- **Update Dialog**: Modal for managing system updates
+  - Shows current and available versions for backend and proxy
+  - "Verifier" button to check GitHub Releases API
+  - "Lancer la mise a jour" button to start update
+  - Dual log panels (Backend Docker / Proxy SDK) with terminal styling
+  - Real-time log streaming via WebSocket
+- **Update Flow**:
+  1. Check versions via GitHub Releases API
+  2. Update backend: `docker compose pull && up -d`
+  3. Update proxy: Run `install.sh` script (service restart)
+- Key files:
+  - `claude-proxy-sdk/src/update.ts` - Update logic (check, backend, proxy)
+  - `backend/handlers/update.go` - Relay handler to proxy SDK
+  - `frontend/src/stores/updateStore.ts` - Update state with WebSocket
+  - `frontend/src/components/UpdateDialog.svelte` - Update UI
+- Endpoints:
+  - `GET /api/update/check` - Check for updates
+  - `POST /api/update/backend` - Start backend update
+  - `POST /api/update/proxy` - Start proxy update
+  - `GET /ws/update` - WebSocket for update logs
+
 **Custom Component Modifications (re-apply after shadcn-svelte updates):**
 - `scroll-area.svelte`: Add `type = "always"` prop (default) for always-visible scrollbar
 - `scroll-area-scrollbar.svelte`: Custom classes for visible scrollbar:
@@ -338,6 +364,10 @@ Attachments format:
 - `GET /api/logs/status` - Get log status only (info/warning/error)
 - `POST /api/logs/clear` - Clear warning/error indicators
 - `GET /ws/logs` - WebSocket for real-time log streaming
+- `GET /api/update/check` - Check for available updates (backend and proxy versions)
+- `POST /api/update/backend` - Start backend (Docker) update
+- `POST /api/update/proxy` - Start proxy SDK update
+- `GET /ws/update` - WebSocket for real-time update log streaming
 
 ## Environment Variables
 

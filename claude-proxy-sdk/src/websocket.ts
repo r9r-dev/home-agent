@@ -14,11 +14,13 @@ import { auditLog } from "./hooks/audit.js";
  */
 export function registerWebSocket(
   app: FastifyInstance,
-  apiKey?: string
+  apiKey?: string,
+  updateClients?: Set<WebSocket>
 ): void {
   app.register(import("@fastify/websocket"));
 
   app.register(async (fastify) => {
+    // Main Claude WebSocket endpoint
     fastify.get(
       "/ws",
       { websocket: true },
@@ -69,6 +71,39 @@ export function registerWebSocket(
         });
       }
     );
+
+    // Update WebSocket endpoint for streaming update logs
+    if (updateClients) {
+      fastify.get(
+        "/ws/update",
+        { websocket: true },
+        (socket: WebSocket, request: FastifyRequest) => {
+          // Validate API key via query param
+          if (apiKey) {
+            const url = new URL(request.url, `http://${request.headers.host}`);
+            const providedKey = url.searchParams.get("key");
+            if (providedKey !== apiKey) {
+              console.log(`[WS/Update] Unauthorized connection attempt`);
+              socket.close(4001, "Unauthorized");
+              return;
+            }
+          }
+
+          console.log(`[WS/Update] Client connected from ${request.ip}`);
+          updateClients.add(socket);
+
+          socket.on("close", () => {
+            console.log(`[WS/Update] Client disconnected from ${request.ip}`);
+            updateClients.delete(socket);
+          });
+
+          socket.on("error", (error: Error) => {
+            console.error(`[WS/Update] Socket error: ${error.message}`);
+            updateClients.delete(socket);
+          });
+        }
+      );
+    }
   });
 }
 

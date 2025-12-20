@@ -143,6 +143,7 @@ func main() {
 	uploadHandler := handlers.NewUploadHandler(config.UploadDir)
 	memoryHandler := handlers.NewMemoryHandler(db)
 	logHandler := handlers.NewLogHandler(logService)
+	updateHandler := handlers.NewUpdateHandler(config.ClaudeProxyURL, config.ClaudeProxyKey)
 
 	// Create Fiber app
 	app := fiber.New(fiber.Config{
@@ -320,6 +321,9 @@ func main() {
 
 	// Register log routes
 	logHandler.RegisterRoutes(app)
+
+	// Register update routes
+	updateHandler.RegisterRoutes(app)
 
 	// Log startup
 	logService.Info("Home Agent started")
