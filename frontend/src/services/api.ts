@@ -323,3 +323,108 @@ export async function fetchToolCallDetail(toolUseId: string): Promise<ToolCallRe
   }
   return response.json();
 }
+
+// Machines API functions
+
+export interface Machine {
+  id: string;
+  name: string;
+  description: string;
+  host: string;
+  port: number;
+  username: string;
+  auth_type: 'password' | 'key';
+  status: 'untested' | 'online' | 'offline';
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateMachineData {
+  name: string;
+  description?: string;
+  host: string;
+  port: number;
+  username: string;
+  auth_type: 'password' | 'key';
+  auth_value: string;
+}
+
+export interface TestConnectionResult {
+  success: boolean;
+  message: string;
+  latency_ms?: number;
+}
+
+/**
+ * Fetch all machines
+ */
+export async function fetchMachines(): Promise<Machine[]> {
+  const response = await fetch(`${API_BASE}/machines`);
+  if (!response.ok) {
+    throw new Error('Echec du chargement des machines');
+  }
+  const data = await response.json();
+  return data || [];
+}
+
+/**
+ * Create a new machine
+ */
+export async function createMachine(data: CreateMachineData): Promise<Machine> {
+  const response = await fetch(`${API_BASE}/machines`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(data),
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: 'Creation failed' }));
+    throw new Error(error.error || 'Echec de la creation');
+  }
+  return response.json();
+}
+
+/**
+ * Update a machine
+ */
+export async function updateMachine(id: string, data: CreateMachineData): Promise<Machine> {
+  const response = await fetch(`${API_BASE}/machines/${id}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(data),
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: 'Update failed' }));
+    throw new Error(error.error || 'Echec de la mise a jour');
+  }
+  return response.json();
+}
+
+/**
+ * Delete a machine
+ */
+export async function deleteMachine(id: string): Promise<void> {
+  const response = await fetch(`${API_BASE}/machines/${id}`, {
+    method: 'DELETE',
+  });
+  if (!response.ok) {
+    throw new Error('Echec de la suppression');
+  }
+}
+
+/**
+ * Test SSH connection to a machine
+ */
+export async function testMachineConnection(id: string): Promise<TestConnectionResult> {
+  const response = await fetch(`${API_BASE}/machines/${id}/test`, {
+    method: 'POST',
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: 'Test failed' }));
+    throw new Error(error.error || 'Echec du test de connexion');
+  }
+  return response.json();
+}

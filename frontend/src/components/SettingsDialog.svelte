@@ -2,7 +2,9 @@
   import * as Dialog from "$lib/components/ui/dialog";
   import { Button } from "$lib/components/ui/button";
   import { Textarea } from "$lib/components/ui/textarea";
+  import Icon from "@iconify/svelte";
   import { settingsStore, isSettingsLoading, isSettingsSaving, settingsError } from '../stores/settingsStore';
+  import MachinesList from './MachinesList.svelte';
 
   interface Props {
     open?: boolean;
@@ -12,10 +14,9 @@
 
   const MAX_CHARS = 2000;
 
-  let activeTab = $state<'personnalisation' | 'apercu'>('personnalisation');
+  let activeTab = $state<'personnalisation' | 'ssh'>('personnalisation');
   let localInstructions = $state('');
-  let showSystemPrompt = $state(true);
-  let showCustomInstructions = $state(true);
+  let showPreview = $state(false);
 
   // Derived values
   let charCount = $derived(localInstructions.length);
@@ -77,17 +78,17 @@
         Personnalisation
       </Button>
       <Button
-        variant={activeTab === 'apercu' ? 'default' : 'ghost'}
+        variant={activeTab === 'ssh' ? 'default' : 'ghost'}
         size="sm"
-        onclick={() => activeTab = 'apercu'}
+        onclick={() => activeTab = 'ssh'}
       >
-        Apercu du prompt
+        Connexions SSH
       </Button>
     </div>
 
     <!-- Tab Content -->
     <div class="flex-1 min-h-0 overflow-y-auto py-4">
-      {#if $isSettingsLoading}
+      {#if $isSettingsLoading && activeTab === 'personnalisation'}
         <div class="flex items-center justify-center h-32">
           <span class="text-muted-foreground">Chargement...</span>
         </div>
@@ -106,17 +107,47 @@
 - Utilise un ton formel
 - Privilegie les solutions simples
 - Explique tes commandes avant de les executer"
-              class="min-h-[200px] resize-none {isOverLimit ? 'border-destructive focus-visible:border-destructive' : ''}"
+              class="min-h-[150px] resize-none {isOverLimit ? 'border-destructive focus-visible:border-destructive' : ''}"
             />
-            <div class="flex justify-between text-xs">
-              <span class="text-muted-foreground">
-                Ces instructions seront ajoutees au prompt systeme
-              </span>
+            <div class="flex justify-between items-center text-xs">
+              <button
+                type="button"
+                onclick={() => showPreview = !showPreview}
+                class="flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <Icon icon={showPreview ? 'mynaui:chevron-down' : 'mynaui:chevron-right'} class="size-4" />
+                Apercu du prompt
+              </button>
               <span class={isOverLimit ? 'text-destructive font-medium' : 'text-muted-foreground'}>
                 {charCount}/{MAX_CHARS}
               </span>
             </div>
           </div>
+
+          <!-- Preview Section (collapsible) -->
+          {#if showPreview}
+            <div class="space-y-3 pt-2 border-t border-border">
+              <div class="space-y-2">
+                <span class="text-xs font-medium text-muted-foreground">Prompt systeme de base</span>
+                <div class="bg-muted/50 rounded-md p-3 font-mono text-xs whitespace-pre-wrap max-h-[120px] overflow-y-auto">
+                  {$settingsStore.systemPrompt}
+                </div>
+              </div>
+
+              {#if localInstructions.trim()}
+                <div class="space-y-2">
+                  <span class="text-xs font-medium text-muted-foreground">Vos instructions</span>
+                  <div class="bg-primary/10 rounded-md p-3 font-mono text-xs whitespace-pre-wrap max-h-[80px] overflow-y-auto">
+                    {localInstructions}
+                  </div>
+                </div>
+              {/if}
+
+              <div class="text-xs text-muted-foreground">
+                Longueur totale : {buildFinalPrompt().length} caracteres
+              </div>
+            </div>
+          {/if}
 
           {#if $settingsError}
             <div class="text-sm text-destructive bg-destructive/10 rounded-md p-3">
@@ -125,65 +156,23 @@
           {/if}
         </div>
       {:else}
-        <!-- Apercu Tab -->
-        <div class="space-y-4">
-          <div class="space-y-2">
-            <div class="flex items-center justify-between">
-              <span class="text-sm font-medium">Prompt systeme de base</span>
-              <Button
-                variant="ghost"
-                size="sm"
-                onclick={() => showSystemPrompt = !showSystemPrompt}
-              >
-                {showSystemPrompt ? 'Masquer' : 'Afficher'}
-              </Button>
-            </div>
-            {#if showSystemPrompt}
-              <div class="bg-muted/50 rounded-md p-3 font-mono text-xs whitespace-pre-wrap max-h-[200px] overflow-y-auto">
-                {$settingsStore.systemPrompt}
-              </div>
-            {/if}
-          </div>
-
-          {#if localInstructions.trim()}
-            <div class="space-y-2">
-              <div class="flex items-center justify-between">
-                <span class="text-sm font-medium">Vos instructions</span>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onclick={() => showCustomInstructions = !showCustomInstructions}
-                >
-                  {showCustomInstructions ? 'Masquer' : 'Afficher'}
-                </Button>
-              </div>
-              {#if showCustomInstructions}
-                <div class="bg-primary/10 rounded-md p-3 font-mono text-xs whitespace-pre-wrap max-h-[150px] overflow-y-auto">
-                  {localInstructions}
-                </div>
-              {/if}
-            </div>
-          {/if}
-
-          <div class="pt-2 border-t border-border">
-            <span class="text-xs text-muted-foreground">
-              Longueur totale du prompt : {buildFinalPrompt().length} caracteres
-            </span>
-          </div>
-        </div>
+        <!-- SSH Connections Tab -->
+        <MachinesList />
       {/if}
     </div>
 
-    <Dialog.Footer class="border-t border-border pt-4">
-      <Button variant="outline" onclick={handleCancel} disabled={$isSettingsSaving}>
-        Annuler
-      </Button>
-      <Button
-        onclick={handleSave}
-        disabled={$isSettingsSaving || isOverLimit || !hasChanges}
-      >
-        {$isSettingsSaving ? 'Enregistrement...' : 'Enregistrer'}
-      </Button>
-    </Dialog.Footer>
+    {#if activeTab === 'personnalisation'}
+      <Dialog.Footer class="border-t border-border pt-4">
+        <Button variant="outline" onclick={handleCancel} disabled={$isSettingsSaving}>
+          Annuler
+        </Button>
+        <Button
+          onclick={handleSave}
+          disabled={$isSettingsSaving || isOverLimit || !hasChanges}
+        >
+          {$isSettingsSaving ? 'Enregistrement...' : 'Enregistrer'}
+        </Button>
+      </Dialog.Footer>
+    {/if}
   </Dialog.Content>
 </Dialog.Root>

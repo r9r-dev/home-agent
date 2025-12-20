@@ -22,10 +22,11 @@ type ChatHandler struct {
 	workspacePath  string // Path prefix for Claude CLI (if different from uploadDir)
 	db             *models.DB
 	logService     *services.LogService
+	cryptoService  *services.CryptoService
 }
 
 // NewChatHandler creates a new ChatHandler instance
-func NewChatHandler(sessionManager *services.SessionManager, claudeExecutor services.ClaudeExecutor, uploadDir string, workspacePath string, db *models.DB, logService *services.LogService) *ChatHandler {
+func NewChatHandler(sessionManager *services.SessionManager, claudeExecutor services.ClaudeExecutor, uploadDir string, workspacePath string, db *models.DB, logService *services.LogService, cryptoService *services.CryptoService) *ChatHandler {
 	return &ChatHandler{
 		sessionManager: sessionManager,
 		claudeExecutor: claudeExecutor,
@@ -33,6 +34,7 @@ func NewChatHandler(sessionManager *services.SessionManager, claudeExecutor serv
 		workspacePath:  workspacePath,
 		db:             db,
 		logService:     logService,
+		cryptoService:  cryptoService,
 	}
 }
 
@@ -52,6 +54,7 @@ type MessageRequest struct {
 	Model       string              `json:"model,omitempty"` // Claude model: haiku, sonnet, opus
 	Attachments []MessageAttachment `json:"attachments,omitempty"`
 	Thinking    bool                `json:"thinking,omitempty"` // Enable extended thinking mode
+	MachineID   string              `json:"machine_id,omitempty"` // Target SSH machine ID
 }
 
 // ToolInfo represents tool information for WebSocket responses
@@ -145,6 +148,54 @@ func (ch *ChatHandler) HandleMessage(ctx context.Context, request MessageRequest
 			fullInstructions = memoryContext + "\n\n" + fullInstructions
 		} else {
 			fullInstructions = memoryContext
+		}
+	}
+
+	// Add SSH machine context if machineId is provided
+	if request.MachineID != "" && ch.db != nil && ch.cryptoService != nil {
+		machine, err := ch.db.GetMachineWithAuth(request.MachineID)
+		if err != nil {
+			return nil, fmt.Errorf("machine not found: %s", request.MachineID)
+		}
+
+		// Decrypt auth value
+		authValue, err := ch.cryptoService.Decrypt(machine.AuthValue)
+		if err != nil {
+			return nil, fmt.Errorf("failed to decrypt machine credentials: %w", err)
+		}
+
+		// Build SSH context
+		sshContext := fmt.Sprintf(`<ssh_machine>
+name: %s
+description: %s
+host: %s
+port: %d
+username: %s
+auth_type: %s
+</ssh_machine>
+
+Tu as acces a cette machine SSH distante. Pour executer des commandes sur cette machine, utilise SSH:
+- Si auth_type est "password": ssh %s@%s -p %d avec le mot de passe: %s
+- Si auth_type est "key": utilise la cle SSH fournie avec ssh -i <key_file> %s@%s -p %d
+
+La cle ou le mot de passe est: %s
+
+IMPORTANT: Execute les commandes sur cette machine distante, pas en local.`,
+			machine.Name,
+			machine.Description,
+			machine.Host,
+			machine.Port,
+			machine.Username,
+			machine.AuthType,
+			machine.Username, machine.Host, machine.Port, authValue,
+			machine.Username, machine.Host, machine.Port,
+			authValue,
+		)
+
+		if fullInstructions != "" {
+			fullInstructions = sshContext + "\n\n" + fullInstructions
+		} else {
+			fullInstructions = sshContext
 		}
 	}
 

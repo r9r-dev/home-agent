@@ -271,6 +271,43 @@ Bug Fixes (v0.19.3):
   - `frontend/src/stores/updateStore.ts`: Added `pollBackendHealth()`, `getState()`, auto-reconnect logic
   - `frontend/src/components/UpdateDialog.svelte`: Added reconnection indicator
 
+SSH Machines Feature (v0.20.0, Issue #7):
+- **Remote Machine Management**: Execute commands on remote SSH machines
+  - Add/edit/delete machines in Settings → "Connexions SSH" tab
+  - Fields: name, description, host, port, username, auth (password or SSH key)
+  - Test connection button with latency display
+  - Status badges: green (online), red (offline), gray (untested)
+- **Machine Selector in InputBox**: Select target machine for command execution
+  - Dropdown appears when machines are configured
+  - "Local" = execute on proxy host
+  - Remote machine = injects SSH context into Claude instructions
+- **Settings Dialog Refactor**: Merged "Personnalisation" and "Apercu du prompt" tabs
+  - Preview now displayed as collapsible section below instructions
+  - New "Connexions SSH" tab for machine management
+- **Security**:
+  - Credentials encrypted with AES-256-GCM
+  - Encryption key derived from SHA-256 hash of database path
+  - `auth_value` field never exposed in API responses (`json:"-"`)
+- Key files:
+  - `backend/services/crypto.go` - AES-256-GCM encryption service
+  - `backend/services/ssh.go` - SSH connection testing
+  - `backend/handlers/machines.go` - Machines CRUD API
+  - `backend/models/database.go` - Machines table and CRUD methods
+  - `frontend/src/stores/machinesStore.ts` - Machines state management
+  - `frontend/src/components/MachinesList.svelte` - Machine list UI
+  - `frontend/src/components/MachineForm.svelte` - Add/edit form
+  - `frontend/src/components/SettingsDialog.svelte` - Refactored with SSH tab
+  - `frontend/src/components/InputBox.svelte` - Machine selector
+- Endpoints:
+  - `GET /api/machines` - List all machines
+  - `POST /api/machines` - Create machine
+  - `GET /api/machines/:id` - Get machine details
+  - `PUT /api/machines/:id` - Update machine
+  - `DELETE /api/machines/:id` - Delete machine
+  - `POST /api/machines/:id/test` - Test SSH connection
+- WebSocket message format:
+  - `{"type": "message", ..., "machineId": "uuid"}` - Target machine for execution
+
 **Custom Component Modifications (re-apply after shadcn-svelte updates):**
 - `scroll-area.svelte`: Add `type = "always"` prop (default) for always-visible scrollbar
 - `scroll-area-scrollbar.svelte`: Custom classes for visible scrollbar:
@@ -284,17 +321,20 @@ Key directories:
 - `src/services/` - API and WebSocket clients
 
 ### Backend Key Files
-- `main.go` - HTTP server, routes, middleware, initializes ProxyClaudeExecutor and LogService
+- `main.go` - HTTP server, routes, middleware, initializes ProxyClaudeExecutor, LogService, and CryptoService
 - `handlers/websocket.go` - WebSocket upgrade and message routing
-- `handlers/chat.go` - Message processing, coordinates Claude service and session management, memory injection, error logging
+- `handlers/chat.go` - Message processing, coordinates Claude service and session management, memory injection, SSH context injection, error logging
 - `handlers/upload.go` - File upload endpoint, serves uploaded files, validates MIME types
 - `handlers/memory.go` - Memory CRUD API endpoints
 - `handlers/logs.go` - Real-time logs REST and WebSocket endpoints
+- `handlers/machines.go` - SSH machines CRUD API and connection testing
 - `services/claude_executor.go` - Interface definition, shared types (ClaudeResponse, MemoryEntry), system prompt
 - `services/proxy_claude_executor.go` - Proxy executor (remote execution via WebSocket to Claude Proxy SDK)
 - `services/session.go` - Session CRUD, manages session IDs from Claude Agent SDK
 - `services/logservice.go` - In-memory log buffer with real-time subscriber notifications
-- `models/database.go` - SQLite schema with migrations, memory table and CRUD
+- `services/crypto.go` - AES-256-GCM encryption for sensitive data (SSH credentials)
+- `services/ssh.go` - SSH connection testing service
+- `models/database.go` - SQLite schema with migrations, memory table, machines table and CRUD
 
 ### ClaudeExecutor Interface
 
@@ -313,15 +353,16 @@ Implementation: `ProxyClaudeExecutor` - Connects to Claude Proxy SDK via WebSock
 ClaudeResponse types: `chunk`, `thinking`, `done`, `error`, `session_id`, `tool_start`, `tool_progress`, `tool_result`, `tool_error`
 
 ### Key Data Flow
-1. User sends message via WebSocket (`type: "message"`, optionally with `thinking: true`)
+1. User sends message via WebSocket (`type: "message"`, optionally with `thinking: true`, `machineId: "..."`)
 2. Backend creates/resumes session
 3. Backend retrieves enabled memory entries and custom instructions from database
 4. Backend combines memory + custom instructions into system prompt context
-5. Backend calls ClaudeExecutor with combined context and thinking flag
-6. Executor streams responses back as `ClaudeResponse` events (including tool events)
-7. Backend forwards as `type: "chunk"`, `type: "thinking"`, or tool event messages to frontend
-8. Backend saves messages and tool calls to SQLite, generates summary title using Claude (haiku)
-9. Frontend accumulates chunks in store, displays thinking and tool calls in collapsible blocks, updates UI reactively
+5. If `machineId` provided, backend fetches machine, decrypts credentials, injects SSH context
+6. Backend calls ClaudeExecutor with combined context and thinking flag
+7. Executor streams responses back as `ClaudeResponse` events (including tool events)
+8. Backend forwards as `type: "chunk"`, `type: "thinking"`, or tool event messages to frontend
+9. Backend saves messages and tool calls to SQLite, generates summary title using Claude (haiku)
+10. Frontend accumulates chunks in store, displays thinking and tool calls in collapsible blocks, updates UI reactively
 
 ### Session Management (v0.16.0+)
 - Frontend starts with `null` session_id (no longer generates UUIDs)
@@ -343,9 +384,9 @@ ClaudeResponse types: `chunk`, `thinking`, `done`, `error`, `session_id`, `tool_
 
 **Client -> Server:**
 ```json
-{"type": "message", "content": "...", "sessionId": "uuid or null", "model": "haiku", "attachments": [], "thinking": false}
+{"type": "message", "content": "...", "sessionId": "uuid or null", "model": "haiku", "attachments": [], "thinking": false, "machineId": "uuid or null"}
 ```
-Note: `sessionId` is null for new conversations, then set after receiving `session_id` from backend. `thinking` enables extended thinking mode.
+Note: `sessionId` is null for new conversations, then set after receiving `session_id` from backend. `thinking` enables extended thinking mode. `machineId` targets a remote SSH machine for execution.
 
 Attachments format:
 ```json
@@ -398,6 +439,12 @@ Attachments format:
 - `POST /api/update/backend` - Start backend (Docker) update
 - `POST /api/update/proxy` - Start proxy SDK update
 - `GET /ws/update` - WebSocket for real-time update log streaming
+- `GET /api/machines` - List all SSH machines (credentials not included)
+- `POST /api/machines` - Create SSH machine (body: `{"name": "...", "host": "...", ...}`)
+- `GET /api/machines/:id` - Get machine details
+- `PUT /api/machines/:id` - Update machine
+- `DELETE /api/machines/:id` - Delete machine
+- `POST /api/machines/:id/test` - Test SSH connection (returns latency)
 
 ## Environment Variables
 
@@ -479,7 +526,6 @@ After finishing a feature and user tells you it respect critera acceptance, alwa
 2. If creating a tag to publish a new version, always:
    - update frontend/package.json with new version
    - update claude-proxy-sdk/package.json with new version
-   - update Dockerfile with new version
 2. Commit
 3. Push origin
 4. Close github related issue if any
@@ -487,5 +533,4 @@ After finishing a feature and user tells you it respect critera acceptance, alwa
 If just creating a tag:
 1. - update frontend/package.json with new version
    - update claude-proxy-sdk/package.json with new version
-   - update Dockerfile with new version
 2. Push tag to origin

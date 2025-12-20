@@ -7,6 +7,7 @@
   import { chatStore, currentThinking, type ClaudeModel, type MessageAttachment } from '../stores/chatStore';
   import { websocketService, type MessageAttachment as WsAttachment } from '../services/websocket';
   import { fetchMessages, fetchSession, updateSessionModel, fetchSettings, updateSetting, fetchToolCalls, type Message as ApiMessage, type UploadedFile, type ToolCallRecord } from '../services/api';
+  import { selectedMachineId } from '../stores/machinesStore';
   import MessageList from './MessageList.svelte';
   import InputBox from './InputBox.svelte';
   import Sidebar from './Sidebar.svelte';
@@ -239,7 +240,7 @@
       chatStore.clearThinking();
 
       chatStore.addMessage('user', content, storeAttachments);
-      websocketService.sendMessage(content, chatState.currentSessionId || undefined, chatState.selectedModel, wsAttachments, chatState.thinkingEnabled);
+      websocketService.sendMessage(content, chatState.currentSessionId || undefined, chatState.selectedModel, wsAttachments, chatState.thinkingEnabled, $selectedMachineId || undefined);
       chatStore.setError(null);
     } catch (error) {
       console.error('[ChatWindow] Failed to send message:', error);

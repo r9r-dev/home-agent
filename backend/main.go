@@ -137,13 +137,17 @@ func main() {
 		log.Printf("Warning: Claude proxy not reachable: %v", err)
 	}
 
+	// Initialize crypto service for machines
+	cryptoService := services.NewCryptoService(config.DatabasePath)
+
 	// Initialize handlers
-	chatHandler := handlers.NewChatHandler(sessionManager, claudeExecutor, config.UploadDir, config.WorkspacePath, db, logService)
+	chatHandler := handlers.NewChatHandler(sessionManager, claudeExecutor, config.UploadDir, config.WorkspacePath, db, logService, cryptoService)
 	wsHandler := handlers.NewWebSocketHandler(chatHandler)
 	uploadHandler := handlers.NewUploadHandler(config.UploadDir)
 	memoryHandler := handlers.NewMemoryHandler(db)
 	logHandler := handlers.NewLogHandler(logService)
 	updateHandler := handlers.NewUpdateHandler(config.ClaudeProxyURL, config.ClaudeProxyKey)
+	machinesHandler := handlers.NewMachinesHandler(db, cryptoService)
 
 	// Create Fiber app
 	app := fiber.New(fiber.Config{
@@ -324,6 +328,9 @@ func main() {
 
 	// Register update routes
 	updateHandler.RegisterRoutes(app)
+
+	// Register machines routes
+	machinesHandler.RegisterRoutes(app)
 
 	// Log startup
 	logService.Info("Home Agent started")

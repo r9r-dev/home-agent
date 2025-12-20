@@ -38,6 +38,7 @@ type ClientMessage struct {
 	Model       string       `json:"model,omitempty"`       // Claude model: haiku, sonnet, opus
 	Attachments []Attachment `json:"attachments,omitempty"` // File attachments
 	Thinking    bool         `json:"thinking,omitempty"`    // Enable extended thinking mode
+	MachineID   string       `json:"machineId,omitempty"`   // Target SSH machine ID
 }
 
 // ServerMessage represents a message sent to the WebSocket client
@@ -163,6 +164,7 @@ func (wsh *WebSocketHandler) handleChatMessage(c *websocket.Conn, clientMsg Clie
 		Model:       clientMsg.Model,
 		Attachments: attachments,
 		Thinking:    clientMsg.Thinking,
+		MachineID:   clientMsg.MachineID,
 	}
 
 	// Create context with timeout

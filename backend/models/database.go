@@ -53,6 +53,21 @@ type ToolCall struct {
 	CompletedAt *time.Time `json:"completed_at,omitempty"`
 }
 
+// Machine represents an SSH machine configuration
+type Machine struct {
+	ID          string    `json:"id"`
+	Name        string    `json:"name"`
+	Description string    `json:"description"`
+	Host        string    `json:"host"`
+	Port        int       `json:"port"`
+	Username    string    `json:"username"`
+	AuthType    string    `json:"auth_type"` // "password" or "key"
+	AuthValue   string    `json:"-"`         // Encrypted, never returned in JSON
+	Status      string    `json:"status"`    // "untested", "online", "offline"
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+}
+
 // DB wraps the SQLite database connection
 type DB struct {
 	conn *sql.DB
@@ -170,6 +185,23 @@ func (db *DB) createTables() error {
 	CREATE INDEX IF NOT EXISTS idx_tool_calls_tool_use_id ON tool_calls(tool_use_id);
 	`
 
+	machinesTable := `
+	CREATE TABLE IF NOT EXISTS machines (
+		id TEXT PRIMARY KEY,
+		name TEXT NOT NULL,
+		description TEXT DEFAULT '',
+		host TEXT NOT NULL,
+		port INTEGER DEFAULT 22,
+		username TEXT NOT NULL,
+		auth_type TEXT NOT NULL CHECK(auth_type IN ('password', 'key')),
+		auth_value TEXT NOT NULL,
+		status TEXT DEFAULT 'untested' CHECK(status IN ('untested', 'online', 'offline')),
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+	);
+	CREATE INDEX IF NOT EXISTS idx_machines_name ON machines(name);
+	`
+
 	// Execute table creation queries
 	if _, err := db.conn.Exec(sessionsTable); err != nil {
 		return fmt.Errorf("failed to create sessions table: %w", err)
@@ -189,6 +221,10 @@ func (db *DB) createTables() error {
 
 	if _, err := db.conn.Exec(toolCallsTable); err != nil {
 		return fmt.Errorf("failed to create tool_calls table: %w", err)
+	}
+
+	if _, err := db.conn.Exec(machinesTable); err != nil {
+		return fmt.Errorf("failed to create machines table: %w", err)
 	}
 
 	// Run migrations (ignore errors if columns already exist)
@@ -1031,6 +1067,222 @@ func (db *DB) GetToolCallsBySession(sessionID string) ([]*ToolCall, error) {
 	}
 
 	return toolCalls, nil
+}
+
+// CreateMachine creates a new machine entry
+func (db *DB) CreateMachine(id, name, description, host string, port int, username, authType, encryptedAuthValue string) (*Machine, error) {
+	now := time.Now()
+
+	query := `
+	INSERT INTO machines (id, name, description, host, port, username, auth_type, auth_value, status, created_at, updated_at)
+	VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'untested', ?, ?)
+	`
+
+	_, err := db.conn.Exec(query, id, name, description, host, port, username, authType, encryptedAuthValue, now, now)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create machine: %w", err)
+	}
+
+	log.Printf("Created machine: %s (%s)", name, id)
+
+	return &Machine{
+		ID:          id,
+		Name:        name,
+		Description: description,
+		Host:        host,
+		Port:        port,
+		Username:    username,
+		AuthType:    authType,
+		AuthValue:   encryptedAuthValue,
+		Status:      "untested",
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}, nil
+}
+
+// GetMachine retrieves a machine by ID (without auth_value)
+func (db *DB) GetMachine(id string) (*Machine, error) {
+	query := `
+	SELECT id, name, description, host, port, username, auth_type, status, created_at, updated_at
+	FROM machines
+	WHERE id = ?
+	`
+
+	var machine Machine
+	err := db.conn.QueryRow(query, id).Scan(
+		&machine.ID,
+		&machine.Name,
+		&machine.Description,
+		&machine.Host,
+		&machine.Port,
+		&machine.Username,
+		&machine.AuthType,
+		&machine.Status,
+		&machine.CreatedAt,
+		&machine.UpdatedAt,
+	)
+
+	if err == sql.ErrNoRows {
+		return nil, nil // Machine not found
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to get machine: %w", err)
+	}
+
+	return &machine, nil
+}
+
+// GetMachineWithAuth retrieves a machine by ID including auth_value (for internal use)
+func (db *DB) GetMachineWithAuth(id string) (*Machine, error) {
+	query := `
+	SELECT id, name, description, host, port, username, auth_type, auth_value, status, created_at, updated_at
+	FROM machines
+	WHERE id = ?
+	`
+
+	var machine Machine
+	err := db.conn.QueryRow(query, id).Scan(
+		&machine.ID,
+		&machine.Name,
+		&machine.Description,
+		&machine.Host,
+		&machine.Port,
+		&machine.Username,
+		&machine.AuthType,
+		&machine.AuthValue,
+		&machine.Status,
+		&machine.CreatedAt,
+		&machine.UpdatedAt,
+	)
+
+	if err == sql.ErrNoRows {
+		return nil, nil // Machine not found
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to get machine with auth: %w", err)
+	}
+
+	return &machine, nil
+}
+
+// ListMachines retrieves all machines (without auth_value)
+func (db *DB) ListMachines() ([]*Machine, error) {
+	query := `
+	SELECT id, name, description, host, port, username, auth_type, status, created_at, updated_at
+	FROM machines
+	ORDER BY name ASC
+	`
+
+	rows, err := db.conn.Query(query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list machines: %w", err)
+	}
+	defer rows.Close()
+
+	var machines []*Machine
+	for rows.Next() {
+		var machine Machine
+		err := rows.Scan(
+			&machine.ID,
+			&machine.Name,
+			&machine.Description,
+			&machine.Host,
+			&machine.Port,
+			&machine.Username,
+			&machine.AuthType,
+			&machine.Status,
+			&machine.CreatedAt,
+			&machine.UpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan machine: %w", err)
+		}
+		machines = append(machines, &machine)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating machines: %w", err)
+	}
+
+	return machines, nil
+}
+
+// UpdateMachine updates an existing machine
+func (db *DB) UpdateMachine(id, name, description, host string, port int, username, authType, encryptedAuthValue string) error {
+	now := time.Now()
+
+	query := `
+	UPDATE machines
+	SET name = ?, description = ?, host = ?, port = ?, username = ?, auth_type = ?, auth_value = ?, status = 'untested', updated_at = ?
+	WHERE id = ?
+	`
+
+	result, err := db.conn.Exec(query, name, description, host, port, username, authType, encryptedAuthValue, now, id)
+	if err != nil {
+		return fmt.Errorf("failed to update machine: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return fmt.Errorf("machine not found: %s", id)
+	}
+
+	log.Printf("Updated machine: %s", id)
+	return nil
+}
+
+// UpdateMachineStatus updates the status of a machine
+func (db *DB) UpdateMachineStatus(id, status string) error {
+	now := time.Now()
+
+	query := `
+	UPDATE machines
+	SET status = ?, updated_at = ?
+	WHERE id = ?
+	`
+
+	result, err := db.conn.Exec(query, status, now, id)
+	if err != nil {
+		return fmt.Errorf("failed to update machine status: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return fmt.Errorf("machine not found: %s", id)
+	}
+
+	log.Printf("Updated machine status: %s -> %s", id, status)
+	return nil
+}
+
+// DeleteMachine deletes a machine
+func (db *DB) DeleteMachine(id string) error {
+	result, err := db.conn.Exec("DELETE FROM machines WHERE id = ?", id)
+	if err != nil {
+		return fmt.Errorf("failed to delete machine: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return fmt.Errorf("machine not found: %s", id)
+	}
+
+	log.Printf("Deleted machine: %s", id)
+	return nil
 }
 
 // Close closes the database connection
