@@ -8,6 +8,7 @@
     updateStore,
     updateAvailable,
     isUpdating,
+    isReconnecting,
     isChecking,
     updateError,
     backendVersion,
@@ -143,7 +144,12 @@
             <div class="px-3 py-2 bg-muted/50 border-b border-border flex items-center gap-2">
               <Icon icon="mynaui:box" class="size-4 text-muted-foreground" />
               <span class="text-sm font-medium">Backend (Docker)</span>
-              {#if $isUpdating}
+              {#if $isReconnecting}
+                <span class="ml-auto flex items-center gap-1.5 text-xs text-amber-500">
+                  <Icon icon="mynaui:refresh" class="size-3 animate-spin" />
+                  Reconnexion...
+                </span>
+              {:else if $isUpdating}
                 <span class="ml-auto w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span>
               {/if}
             </div>

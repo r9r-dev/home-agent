@@ -257,6 +257,20 @@ Bug Fixes (v0.19.0):
   - New WebSocket message type `thinking_end` signals block completion
   - Frontend `finalizeThinking()` action converts streaming content to message
 
+Bug Fixes (v0.19.3):
+- **Fixed**: Backend version now displays correctly instead of "latest"
+  - Added `LABEL version=${APP_VERSION}` in Dockerfile runtime stage
+  - Docker inspect now returns the actual version from the label
+- **Fixed**: Update WebSocket reconnection during backend restart
+  - Frontend now polls `/api/health` when WebSocket connection is lost during update
+  - Automatic reconnection with exponential backoff (max 2 minutes timeout)
+  - Proxy SDK update is automatically triggered after backend comes back online
+  - New `isReconnecting` state with UI indicator ("Reconnexion...")
+- Key changes:
+  - `Dockerfile`: Added version label for docker inspect
+  - `frontend/src/stores/updateStore.ts`: Added `pollBackendHealth()`, `getState()`, auto-reconnect logic
+  - `frontend/src/components/UpdateDialog.svelte`: Added reconnection indicator
+
 **Custom Component Modifications (re-apply after shadcn-svelte updates):**
 - `scroll-area.svelte`: Add `type = "always"` prop (default) for always-visible scrollbar
 - `scroll-area-scrollbar.svelte`: Custom classes for visible scrollbar:
@@ -458,3 +472,20 @@ File upload path mapping (v0.16.0):
 - GUID-based filenames prevent collisions (no session subdirectory needed)
 
 See `claude-proxy-sdk/README.md` for detailed proxy setup.
+
+## Commit, Push, Tag policies
+After finishing a feature and user tells you it respect critera acceptance, always:
+1. Update CLAUDE.md
+2. If creating a tag to publish a new version, always:
+   - update frontend/package.json with new version
+   - update claude-proxy-sdk/package.json with new version
+   - update Dockerfile with new version
+2. Commit
+3. Push origin
+4. Close github related issue if any
+
+If just creating a tag:
+1. - update frontend/package.json with new version
+   - update claude-proxy-sdk/package.json with new version
+   - update Dockerfile with new version
+2. Push tag to origin

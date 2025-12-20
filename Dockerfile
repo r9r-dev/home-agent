@@ -45,6 +45,10 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 # This stage waits for both builders to complete, then combines their outputs
 FROM alpine:3.19
 
+# Version label for docker inspect (passed via --build-arg)
+ARG APP_VERSION=dev
+LABEL version=${APP_VERSION}
+
 # Install runtime dependencies only (no sqlite-libs needed with pure Go SQLite)
 RUN apk add --no-cache ca-certificates tzdata curl
 
