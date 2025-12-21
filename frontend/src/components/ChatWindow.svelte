@@ -15,6 +15,7 @@
   import SettingsDialog from './SettingsDialog.svelte';
   import MemoryDialog from './MemoryDialog.svelte';
   import UpdateDialog from './UpdateDialog.svelte';
+  import SearchDialog from './SearchDialog.svelte';
   import LogIndicator from './LogIndicator.svelte';
   import LogPanel from './LogPanel.svelte';
   import { updateAvailable } from '../stores/updateStore';
@@ -35,7 +36,11 @@
   let settingsDialogOpen = $state(false);
   let memoryDialogOpen = $state(false);
   let updateDialogOpen = $state(false);
+  let searchDialogOpen = $state(false);
   let logPanelOpen = $state(false);
+
+  // Search result navigation
+  let scrollToMessageId = $state<number | null>(null);
 
   // Model options
   const models: { value: ClaudeModel; label: string }[] = [
@@ -350,6 +355,23 @@
     }
   }
 
+  /**
+   * Handle search result selection - load session and scroll to message
+   */
+  async function handleSearchResult(sessionId: string, messageId: number) {
+    // Store message ID to scroll to after load
+    scrollToMessageId = messageId;
+    // Load the session
+    await handleSelectSession(sessionId);
+  }
+
+  /**
+   * Open search dialog
+   */
+  function openSearch() {
+    searchDialogOpen = true;
+  }
+
   // Refresh sidebar when a message is sent (new session might be created)
   $effect(() => {
     if (!$chatStore.isTyping && $chatStore.messages.length > 0 && sidebar) {
@@ -357,7 +379,31 @@
     }
   });
 
-  
+  // Scroll to message after session loads (from search result)
+  $effect(() => {
+    if (scrollToMessageId !== null && !chatState.isTyping && chatState.messages.length > 0) {
+      // Small delay to ensure DOM is updated
+      setTimeout(() => {
+        const messageEl = document.querySelector(`[data-message-id="${scrollToMessageId}"]`);
+        if (messageEl) {
+          messageEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          // Highlight briefly
+          messageEl.classList.add('search-highlight');
+          setTimeout(() => messageEl.classList.remove('search-highlight'), 2000);
+        }
+        scrollToMessageId = null;
+      }, 100);
+    }
+  });
+
+  // Keyboard shortcut handler for Cmd+K search
+  function handleKeydown(event: KeyboardEvent) {
+    if ((event.metaKey || event.ctrlKey) && event.key === 'k') {
+      event.preventDefault();
+      searchDialogOpen = true;
+    }
+  }
+
   /**
    * Lifecycle: mount
    */
@@ -371,6 +417,9 @@
     unsubscribeOpen = websocketService.onOpen(handleWebSocketOpen);
     unsubscribeClose = websocketService.onClose(handleWebSocketClose);
     unsubscribeError = websocketService.onError(handleWebSocketError);
+
+    // Add keyboard shortcut listener
+    document.addEventListener('keydown', handleKeydown);
 
     websocketService.connect();
   });
@@ -386,6 +435,9 @@
     if (unsubscribeClose) unsubscribeClose();
     if (unsubscribeError) unsubscribeError();
 
+    // Remove keyboard shortcut listener
+    document.removeEventListener('keydown', handleKeydown);
+
     websocketService.disconnect();
   });
 </script>
@@ -396,6 +448,7 @@
     currentSessionId={chatState.currentSessionId}
     onSelectSession={handleSelectSession}
     onNewConversation={handleNewConversation}
+    onOpenSearch={openSearch}
   />
 
   <div class="flex flex-col flex-1 min-w-0 min-h-0 bg-background">
@@ -538,6 +591,9 @@
 
 <!-- Update Dialog -->
 <UpdateDialog bind:open={updateDialogOpen} />
+
+<!-- Search Dialog -->
+<SearchDialog bind:open={searchDialogOpen} onSelectResult={handleSearchResult} />
 
 <!-- Log Panel -->
 <LogPanel bind:open={logPanelOpen} />

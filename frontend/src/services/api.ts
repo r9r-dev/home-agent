@@ -428,3 +428,43 @@ export async function testMachineConnection(id: string): Promise<TestConnectionR
   }
   return response.json();
 }
+
+// Search API functions
+
+export interface SearchResult {
+  message_id: number;
+  session_id: string;
+  role: 'user' | 'assistant' | 'thinking';
+  snippet: string; // HTML with <mark> tags for highlighting
+  timestamp: string;
+  session_title: string;
+}
+
+export interface SearchResponse {
+  results: SearchResult[];
+  total: number;
+  query: string;
+  limit: number;
+  offset: number;
+}
+
+/**
+ * Search messages across all conversations
+ */
+export async function searchMessages(
+  query: string,
+  limit = 20,
+  offset = 0
+): Promise<SearchResponse> {
+  const params = new URLSearchParams({
+    q: query,
+    limit: limit.toString(),
+    offset: offset.toString(),
+  });
+
+  const response = await fetch(`${API_BASE}/search?${params}`);
+  if (!response.ok) {
+    throw new Error('Echec de la recherche');
+  }
+  return response.json();
+}

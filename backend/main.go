@@ -148,6 +148,7 @@ func main() {
 	logHandler := handlers.NewLogHandler(logService)
 	updateHandler := handlers.NewUpdateHandler(config.ClaudeProxyURL, config.ClaudeProxyKey)
 	machinesHandler := handlers.NewMachinesHandler(db, cryptoService)
+	searchHandler := handlers.NewSearchHandler(db)
 
 	// Create Fiber app
 	app := fiber.New(fiber.Config{
@@ -331,6 +332,9 @@ func main() {
 
 	// Register machines routes
 	machinesHandler.RegisterRoutes(app)
+
+	// Register search routes
+	searchHandler.RegisterRoutes(app)
 
 	// Log startup
 	logService.Info("Home Agent started")

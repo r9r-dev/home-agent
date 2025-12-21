@@ -13,9 +13,10 @@
     currentSessionId?: string | null;
     onSelectSession: (sessionId: string) => void;
     onNewConversation: () => void;
+    onOpenSearch: () => void;
   }
 
-  let { currentSessionId = null, onSelectSession, onNewConversation }: Props = $props();
+  let { currentSessionId = null, onSelectSession, onNewConversation, onOpenSearch }: Props = $props();
 
   let sessions = $state<Session[]>([]);
   let loading = $state(true);
@@ -214,12 +215,12 @@
       {/if}
     </Button>
 
-    <!-- Rechercher (non-functional) -->
+    <!-- Rechercher -->
     <Button
       variant="ghost"
-      disabled
-      title="Rechercher (bientot disponible)"
-      class="text-muted-foreground {isCollapsed ? 'w-full justify-center px-0' : 'w-full justify-start gap-3'}"
+      onclick={onOpenSearch}
+      title="Rechercher (Cmd+K)"
+      class="text-muted-foreground hover:text-foreground {isCollapsed ? 'w-full justify-center px-0' : 'w-full justify-start gap-3'}"
       size={isCollapsed ? 'icon' : 'default'}
     >
       <Icon icon="mynaui:search" class="size-5 shrink-0" />

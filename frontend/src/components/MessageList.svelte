@@ -264,6 +264,7 @@
           <div
             class="flex flex-col max-w-full {message.role === 'user' ? 'self-end items-end max-w-[80%]' : 'self-start items-start'}"
             data-role={message.role}
+            data-message-id={message.id}
           >
             <div class="{message.role === 'user' ? 'bg-muted border border-border rounded-lg px-5 py-4' : ''}">
               {#if message.role === 'user'}

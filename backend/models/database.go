@@ -53,6 +53,16 @@ type ToolCall struct {
 	CompletedAt *time.Time `json:"completed_at,omitempty"`
 }
 
+// SearchResult represents a search result with snippet
+type SearchResult struct {
+	MessageID    int       `json:"message_id"`
+	SessionID    string    `json:"session_id"`
+	Role         string    `json:"role"`
+	Snippet      string    `json:"snippet"`
+	Timestamp    time.Time `json:"timestamp"`
+	SessionTitle string    `json:"session_title"`
+}
+
 // Machine represents an SSH machine configuration
 type Machine struct {
 	ID          string    `json:"id"`
@@ -238,6 +248,56 @@ func (db *DB) createTables() error {
 		log.Printf("Warning: failed to migrate messages table for thinking role: %v", err)
 	}
 
+	// FTS5 virtual table for full-text search on messages
+	fts5Table := `
+	CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
+		session_id UNINDEXED,
+		role UNINDEXED,
+		content,
+		content=messages,
+		content_rowid=id
+	);
+	`
+
+	if _, err := db.conn.Exec(fts5Table); err != nil {
+		return fmt.Errorf("failed to create FTS5 table: %w", err)
+	}
+
+	// Triggers to keep FTS table in sync with messages table
+	fts5Triggers := []string{
+		// Trigger for INSERT
+		`CREATE TRIGGER IF NOT EXISTS messages_fts_ai AFTER INSERT ON messages BEGIN
+			INSERT INTO messages_fts(rowid, session_id, role, content)
+			VALUES (new.id, new.session_id, new.role, new.content);
+		END;`,
+		// Trigger for DELETE
+		`CREATE TRIGGER IF NOT EXISTS messages_fts_ad AFTER DELETE ON messages BEGIN
+			INSERT INTO messages_fts(messages_fts, rowid, session_id, role, content)
+			VALUES ('delete', old.id, old.session_id, old.role, old.content);
+		END;`,
+		// Trigger for UPDATE
+		`CREATE TRIGGER IF NOT EXISTS messages_fts_au AFTER UPDATE ON messages BEGIN
+			INSERT INTO messages_fts(messages_fts, rowid, session_id, role, content)
+			VALUES ('delete', old.id, old.session_id, old.role, old.content);
+			INSERT INTO messages_fts(rowid, session_id, role, content)
+			VALUES (new.id, new.session_id, new.role, new.content);
+		END;`,
+	}
+
+	for _, trigger := range fts5Triggers {
+		if _, err := db.conn.Exec(trigger); err != nil {
+			// Ignore errors if trigger already exists
+			if !strings.Contains(err.Error(), "already exists") {
+				log.Printf("Warning: failed to create FTS5 trigger: %v", err)
+			}
+		}
+	}
+
+	// Populate FTS5 index from existing messages if needed
+	if err := db.migrateFTS5(); err != nil {
+		log.Printf("Warning: failed to populate FTS5 index: %v", err)
+	}
+
 	return nil
 }
 
@@ -315,6 +375,32 @@ func (db *DB) migrateMessagesTableForThinking() error {
 		}
 
 		log.Println("Messages table migration completed successfully")
+	}
+
+	return nil
+}
+
+// migrateFTS5 populates the FTS5 index from existing messages if needed
+func (db *DB) migrateFTS5() error {
+	// Check if FTS table is empty but messages exist
+	var ftsCount, msgCount int
+	if err := db.conn.QueryRow("SELECT COUNT(*) FROM messages_fts").Scan(&ftsCount); err != nil {
+		return fmt.Errorf("failed to count FTS entries: %w", err)
+	}
+	if err := db.conn.QueryRow("SELECT COUNT(*) FROM messages").Scan(&msgCount); err != nil {
+		return fmt.Errorf("failed to count messages: %w", err)
+	}
+
+	if ftsCount == 0 && msgCount > 0 {
+		log.Printf("Populating FTS5 index from %d existing messages...", msgCount)
+		_, err := db.conn.Exec(`
+			INSERT INTO messages_fts(rowid, session_id, role, content)
+			SELECT id, session_id, role, content FROM messages
+		`)
+		if err != nil {
+			return fmt.Errorf("failed to populate FTS5: %w", err)
+		}
+		log.Printf("FTS5 index populated with %d messages", msgCount)
 	}
 
 	return nil
@@ -1283,6 +1369,60 @@ func (db *DB) DeleteMachine(id string) error {
 
 	log.Printf("Deleted machine: %s", id)
 	return nil
+}
+
+// SearchMessages performs full-text search on messages
+func (db *DB) SearchMessages(query string, limit, offset int) ([]*SearchResult, int, error) {
+	// Sanitize query for FTS5 (wrap in quotes to handle special characters)
+	safeQuery := `"` + strings.ReplaceAll(query, `"`, `""`) + `"`
+
+	// Count total matches
+	var total int
+	countQuery := `
+		SELECT COUNT(*) FROM messages_fts
+		WHERE messages_fts MATCH ?
+	`
+	if err := db.conn.QueryRow(countQuery, safeQuery).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("failed to count search results: %w", err)
+	}
+
+	// Get results with snippets
+	searchQuery := `
+		SELECT
+			m.id,
+			m.session_id,
+			m.role,
+			snippet(messages_fts, 2, '<mark>', '</mark>', '...', 32) as snippet,
+			m.created_at,
+			COALESCE(s.title, '') as session_title
+		FROM messages_fts
+		JOIN messages m ON messages_fts.rowid = m.id
+		JOIN sessions s ON m.session_id = s.session_id
+		WHERE messages_fts MATCH ?
+		ORDER BY rank
+		LIMIT ? OFFSET ?
+	`
+
+	rows, err := db.conn.Query(searchQuery, safeQuery, limit, offset)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to search messages: %w", err)
+	}
+	defer rows.Close()
+
+	var results []*SearchResult
+	for rows.Next() {
+		var r SearchResult
+		if err := rows.Scan(&r.MessageID, &r.SessionID, &r.Role, &r.Snippet, &r.Timestamp, &r.SessionTitle); err != nil {
+			return nil, 0, fmt.Errorf("failed to scan search result: %w", err)
+		}
+		results = append(results, &r)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, 0, fmt.Errorf("error iterating search results: %w", err)
+	}
+
+	return results, total, nil
 }
 
 // Close closes the database connection
