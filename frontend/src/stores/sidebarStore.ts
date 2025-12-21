@@ -22,3 +22,16 @@ function createSidebarStore() {
 }
 
 export const sidebarStore = createSidebarStore();
+
+// Mobile drawer state
+function createDrawerStore() {
+  const { subscribe, set } = writable<boolean>(false);
+
+  return {
+    subscribe,
+    open: () => set(true),
+    close: () => set(false),
+  };
+}
+
+export const drawerStore = createDrawerStore();

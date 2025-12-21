@@ -181,35 +181,6 @@
 </script>
 
 <div class="p-6 pb-0 bg-background border-t border-border">
-  <!-- Attachments preview -->
-  {#if attachments.length > 0}
-    <div class="flex flex-wrap gap-2 mb-3 max-w-[900px] mx-auto">
-      {#each attachments as attachment, index (attachment.id)}
-        <div class="flex items-center gap-2 bg-muted border border-border rounded-lg px-3 py-2 text-sm">
-          {#if attachment.type === 'image'}
-            <img
-              src={attachment.path}
-              alt={attachment.filename}
-              class="w-8 h-8 object-cover rounded"
-            />
-          {:else}
-            <Icon icon="mynaui:file" class="size-5 text-muted-foreground" />
-          {/if}
-          <span class="truncate max-w-[150px] font-mono text-xs">{attachment.filename}</span>
-          <span class="text-muted-foreground text-xs">({formatSize(attachment.size)})</span>
-          <button
-            type="button"
-            onclick={() => removeAttachment(index)}
-            class="p-0.5 hover:bg-destructive/20 rounded transition-colors"
-            aria-label="Retirer le fichier"
-          >
-            <Icon icon="mynaui:x" class="size-4 text-muted-foreground hover:text-destructive" />
-          </button>
-        </div>
-      {/each}
-    </div>
-  {/if}
-
   <!-- Upload error -->
   {#if uploadError}
     <div class="flex items-center gap-2 text-destructive text-sm mb-3 max-w-[900px] mx-auto">
@@ -228,7 +199,7 @@
       multiple
       accept={[...ALLOWED_TYPES, ...ALLOWED_EXTENSIONS].join(',')}
       class="hidden"
-      aria-label="Sélectionner des fichiers"
+      aria-label="Selectionner des fichiers"
     />
 
     <!-- Attachment button -->
@@ -260,36 +231,6 @@
       class="flex-1 bg-transparent border-none shadow-none p-0 min-h-5 max-h-[200px] resize-none focus-visible:ring-0 focus-visible:border-none text-sm font-mono"
     />
 
-    <!-- Machine selector -->
-    {#if $machines.length > 0}
-      <Select.Root type="single" value={$selectedMachineId ?? ''} onValueChange={handleMachineChange}>
-        <Select.Trigger class="w-[130px] h-7 text-xs border-border bg-background">
-          <div class="flex items-center gap-1.5 truncate">
-            <Icon icon="mynaui:server" class="size-3.5 shrink-0" />
-            <span class="truncate">{$selectedMachine?.name || 'Local'}</span>
-          </div>
-        </Select.Trigger>
-        <Select.Content>
-          <Select.Item value="">
-            <div class="flex items-center gap-2">
-              <Icon icon="mynaui:home" class="size-4" />
-              Local
-            </div>
-          </Select.Item>
-          {#each $machines as machine (machine.id)}
-            <Select.Item value={machine.id} disabled={machine.status === 'offline'}>
-              <div class="flex items-center gap-2">
-                <span class={machine.status === 'online' ? 'text-green-500' : machine.status === 'offline' ? 'text-red-500' : 'text-gray-500'}>
-                  <Icon icon="mynaui:server" class="size-4" />
-                </span>
-                <span class="truncate">{machine.name}</span>
-              </div>
-            </Select.Item>
-          {/each}
-        </Select.Content>
-      </Select.Root>
-    {/if}
-
     <Button
       variant="outline"
       size="icon-sm"
@@ -301,9 +242,69 @@
       <Icon icon="mynaui:send" class="size-4" />
     </Button>
   </div>
+
+  <!-- Attachments and Machine selector (below input) -->
+  {#if attachments.length > 0 || $machines.length > 0}
+    <div class="flex flex-wrap items-center gap-2 max-w-[900px] mx-auto mt-3 px-1">
+      <!-- Attachment chips -->
+      {#each attachments as attachment, index (attachment.id)}
+        <div class="flex items-center gap-1.5 bg-muted/50 border border-border rounded-full px-3 py-1 text-xs">
+          {#if attachment.type === 'image'}
+            <img
+              src={attachment.path}
+              alt={attachment.filename}
+              class="w-4 h-4 object-cover rounded-full"
+            />
+          {:else}
+            <Icon icon="mynaui:file" class="size-3.5 text-muted-foreground" />
+          {/if}
+          <span class="truncate max-w-[100px] font-mono">{attachment.filename}</span>
+          <button
+            type="button"
+            onclick={() => removeAttachment(index)}
+            class="p-0.5 hover:bg-destructive/20 rounded-full transition-colors ml-0.5"
+            aria-label="Retirer le fichier"
+          >
+            <Icon icon="mynaui:x" class="size-3 text-muted-foreground hover:text-destructive" />
+          </button>
+        </div>
+      {/each}
+
+      <!-- Machine selector as badge -->
+      {#if $machines.length > 0}
+        <Select.Root type="single" value={$selectedMachineId ?? ''} onValueChange={handleMachineChange}>
+          <Select.Trigger class="h-7 text-xs border-border bg-muted/50 rounded-full px-3 w-auto min-w-[100px]">
+            <div class="flex items-center gap-1.5 truncate">
+              <Icon icon="mynaui:server" class="size-3.5 shrink-0" />
+              <span class="truncate">{$selectedMachine?.name || 'Local'}</span>
+            </div>
+          </Select.Trigger>
+          <Select.Content>
+            <Select.Item value="">
+              <div class="flex items-center gap-2">
+                <Icon icon="mynaui:home" class="size-4" />
+                Local
+              </div>
+            </Select.Item>
+            {#each $machines as machine (machine.id)}
+              <Select.Item value={machine.id} disabled={machine.status === 'offline'}>
+                <div class="flex items-center gap-2">
+                  <span class={machine.status === 'online' ? 'text-green-500' : machine.status === 'offline' ? 'text-red-500' : 'text-gray-500'}>
+                    <Icon icon="mynaui:server" class="size-4" />
+                  </span>
+                  <span class="truncate">{machine.name}</span>
+                </div>
+              </Select.Item>
+            {/each}
+          </Select.Content>
+        </Select.Root>
+      {/if}
+    </div>
+  {/if}
+
   {#if disabled}
     <p class="mt-3 text-xs text-muted-foreground text-center font-mono">
-      En attente de réponse...
+      En attente de reponse...
     </p>
   {/if}
 </div>

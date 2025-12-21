@@ -227,16 +227,7 @@
     aria-live="polite"
     aria-label="Chat messages"
   >
-    {#if flow.length === 0}
-      <div class="flex-1 flex flex-col items-center justify-center text-center py-16 px-8">
-        <h1 class="text-4xl font-medium text-foreground mb-4 tracking-tight">
-          Bienvenue, Ronan.
-        </h1>
-        <p class="text-base text-muted-foreground max-w-[500px]">
-          Comment puis-je vous aider ?
-        </p>
-      </div>
-    {:else}
+    {#if flow.length > 0}
       {#each flow as item, index (item.type === 'tool_call' ? item.toolCall?.toolUseId : item.message?.id)}
         <!-- Separator between consecutive assistant messages -->
         {#if index > 0 && item.type === 'message' && item.message?.role === 'assistant'}

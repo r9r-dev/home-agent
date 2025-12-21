@@ -60,7 +60,7 @@
 </script>
 
 <Dialog.Root bind:open>
-  <Dialog.Content class="sm:max-w-[600px] max-h-[85vh] flex flex-col">
+  <Dialog.Content class="sm:max-w-[800px] lg:max-w-[900px] max-h-[85vh] flex flex-col">
     <Dialog.Header>
       <Dialog.Title>Parametres</Dialog.Title>
       <Dialog.Description>

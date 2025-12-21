@@ -5,7 +5,7 @@
   import { ScrollArea } from "$lib/components/ui/scroll-area";
   import { Separator } from "$lib/components/ui/separator";
   import * as Dialog from "$lib/components/ui/dialog";
-  import { sidebarStore } from '../stores/sidebarStore';
+  import { sidebarStore, drawerStore } from '../stores/sidebarStore';
   import Icon from "@iconify/svelte";
   import SettingsDialog from './SettingsDialog.svelte';
 
@@ -93,7 +93,98 @@
   });
 </script>
 
-<aside class="bg-sidebar border-r border-sidebar-border flex flex-col h-screen shrink-0 transition-[width] duration-200 ease-in-out {isCollapsed ? 'w-16' : 'w-[260px]'}">
+<!-- Mobile drawer backdrop -->
+<div
+  class="drawer-backdrop {$drawerStore ? 'open' : ''}"
+  onclick={() => drawerStore.close()}
+  role="button"
+  tabindex="-1"
+  aria-label="Fermer le menu"
+></div>
+
+<!-- Mobile drawer sidebar -->
+<aside class="sidebar-drawer bg-sidebar border-r border-sidebar-border flex flex-col h-screen w-[280px] {$drawerStore ? 'open' : ''}">
+  <!-- Close button -->
+  <div class="p-2 flex justify-between items-center">
+    <span class="text-sm font-medium text-sidebar-foreground px-2">Menu</span>
+    <Button
+      variant="ghost"
+      size="icon"
+      onclick={() => drawerStore.close()}
+      class="h-8 w-8 hover:bg-sidebar-accent"
+      aria-label="Fermer le menu"
+    >
+      <Icon icon="mynaui:x" class="size-4" />
+    </Button>
+  </div>
+
+  <Separator />
+
+  <!-- Actions -->
+  <div class="px-2 py-3 space-y-2">
+    <Button
+      variant="outline"
+      onclick={() => { onNewConversation(); drawerStore.close(); }}
+      class="bg-sidebar hover:bg-sidebar-accent w-full justify-start gap-3"
+    >
+      <Icon icon="mynaui:edit-one" class="size-5 shrink-0" />
+      <span class="text-sm">Nouveau chat</span>
+    </Button>
+  </div>
+
+  <Separator />
+
+  <!-- Chat History -->
+  <div class="flex-1 min-h-0 flex flex-col">
+    <div class="px-3 py-2">
+      <span class="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+        Vos chats
+      </span>
+    </div>
+
+    <ScrollArea class="flex-1 min-h-0 px-2 py-2">
+      {#if loading}
+        <p class="p-4 text-center text-muted-foreground text-sm">Chargement...</p>
+      {:else if sessions.length === 0}
+        <p class="p-4 text-center text-muted-foreground text-sm">Aucune conversation</p>
+      {:else}
+        <div class="space-y-1">
+          {#each sessions as session (session.session_id)}
+            <button
+              class="group w-full flex items-center rounded-md cursor-pointer text-left transition-colors hover:bg-sidebar-accent justify-between px-3 py-2.5 {currentSessionId === session.session_id ? 'bg-sidebar-accent border border-sidebar-border' : ''}"
+              onclick={() => { onSelectSession(session.session_id); drawerStore.close(); }}
+            >
+              <div class="flex-1 min-w-0 flex flex-col gap-1">
+                <span class="text-[0.8125rem] text-sidebar-foreground leading-snug font-cal">
+                  {session.title || 'Sans titre'}
+                </span>
+                <span class="text-[0.625rem] text-muted-foreground">
+                  {formatDate(session.last_activity)}
+                </span>
+              </div>
+            </button>
+          {/each}
+        </div>
+      {/if}
+    </ScrollArea>
+  </div>
+
+  <!-- Settings -->
+  <Separator />
+  <div class="px-2 py-3">
+    <Button
+      variant="ghost"
+      onclick={() => { settingsDialogOpen = true; drawerStore.close(); }}
+      class="text-muted-foreground w-full justify-start gap-3"
+    >
+      <Icon icon="mynaui:cog" class="size-5 shrink-0" />
+      <span class="text-sm">Parametres</span>
+    </Button>
+  </div>
+</aside>
+
+<!-- Desktop sidebar -->
+<aside class="sidebar-desktop bg-sidebar border-r border-sidebar-border flex flex-col h-screen shrink-0 transition-[width] duration-200 ease-in-out {isCollapsed ? 'w-16' : 'w-[260px]'}">
   <!-- Toggle button -->
   <div class="p-2 flex {isCollapsed ? 'justify-center' : 'justify-end'}">
     <Button

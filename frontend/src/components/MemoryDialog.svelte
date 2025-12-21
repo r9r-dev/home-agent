@@ -132,7 +132,7 @@
 </script>
 
 <Dialog.Root bind:open>
-  <Dialog.Content class="sm:max-w-[650px] max-h-[85vh] flex flex-col">
+  <Dialog.Content class="sm:max-w-[800px] lg:max-w-[900px] max-h-[85vh] flex flex-col">
     <Dialog.Header>
       <Dialog.Title>Memoire</Dialog.Title>
       <Dialog.Description>

@@ -137,25 +137,22 @@
   font-weight: 400;
 }
 
-/* bits-ui ScrollArea - always visible scrollbar styles */
+/* bits-ui ScrollArea - scrollbar styles (auto visibility) */
 [data-scroll-area-scrollbar][data-orientation="vertical"] {
-  display: flex !important;
-  width: 12px !important;
-  padding: 2px !important;
-  background-color: var(--muted) !important;
-  opacity: 1 !important;
-  visibility: visible !important;
+  width: 12px;
+  padding: 2px;
+  background-color: var(--muted);
 }
 
 [data-scroll-area-thumb] {
-  background-color: var(--muted-foreground) !important;
-  border-radius: 9999px !important;
-  opacity: 0.5 !important;
-  min-height: 30px !important;
+  background-color: var(--muted-foreground);
+  border-radius: 9999px;
+  opacity: 0.5;
+  min-height: 30px;
 }
 
 [data-scroll-area-thumb]:hover {
-  opacity: 0.7 !important;
+  opacity: 0.7;
 }
 
 /* Update notification indicator animation */
@@ -176,4 +173,63 @@
   border-radius: 50%;
   background-color: rgb(34 197 94);
   animation: update-pulse 2s ease-in-out infinite;
+}
+
+/* Mobile responsive - Portrait mode */
+@media (orientation: portrait) {
+  .sidebar-desktop {
+    display: none !important;
+  }
+
+  .burger-menu {
+    display: flex !important;
+  }
+
+  .sidebar-drawer {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    z-index: 50;
+    transform: translateX(-100%);
+    transition: transform 200ms ease-out;
+  }
+
+  .sidebar-drawer.open {
+    transform: translateX(0);
+  }
+
+  .drawer-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 40;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 200ms ease-out;
+  }
+
+  .drawer-backdrop.open {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+
+/* Mobile responsive - Landscape mode */
+@media (orientation: landscape) {
+  .sidebar-desktop {
+    display: flex !important;
+  }
+
+  .burger-menu {
+    display: none !important;
+  }
+
+  .sidebar-drawer {
+    display: none !important;
+  }
+
+  .drawer-backdrop {
+    display: none !important;
+  }
 }

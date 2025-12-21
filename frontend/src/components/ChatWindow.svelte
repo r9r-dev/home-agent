@@ -8,6 +8,7 @@
   import { websocketService, type MessageAttachment as WsAttachment } from '../services/websocket';
   import { fetchMessages, fetchSession, updateSessionModel, fetchSettings, updateSetting, fetchToolCalls, type Message as ApiMessage, type UploadedFile, type ToolCallRecord } from '../services/api';
   import { selectedMachineId } from '../stores/machinesStore';
+  import { drawerStore } from '../stores/sidebarStore';
   import MessageList from './MessageList.svelte';
   import InputBox from './InputBox.svelte';
   import Sidebar from './Sidebar.svelte';
@@ -18,6 +19,7 @@
   import LogPanel from './LogPanel.svelte';
   import { updateAvailable } from '../stores/updateStore';
   import { Badge } from "$lib/components/ui/badge";
+  import { Button } from "$lib/components/ui/button";
   import * as Menubar from "$lib/components/ui/menubar";
   import { Toaster } from "$lib/components/ui/sonner";
   import { toast } from "svelte-sonner";
@@ -81,6 +83,9 @@
 
   // Subscribe to store
   let chatState = $derived($chatStore);
+
+  // Track if there are messages to determine layout
+  let hasMessages = $derived($chatStore.messages.length > 0);
 
   // Cleanup functions
   let unsubscribeMessage: (() => void) | null = null;
@@ -394,8 +399,21 @@
   <div class="flex flex-col flex-1 min-w-0 min-h-0 bg-background">
     <header class="bg-background border-b border-border shrink-0">
       <div class="flex justify-between items-center px-8 py-3 max-w-[1400px] mx-auto w-full">
-        <div class="text-xl font-medium tracking-tight">
-          <span class="text-foreground">hal</span><span class="text-muted-foreground">fred</span>
+        <div class="flex items-center gap-3">
+          <!-- Burger menu (visible in portrait mode) -->
+          <Button
+            variant="ghost"
+            size="icon"
+            onclick={() => drawerStore.open()}
+            class="burger-menu hidden"
+            aria-label="Ouvrir le menu"
+          >
+            <Icon icon="mynaui:menu" class="size-5" />
+          </Button>
+
+          <div class="text-xl font-medium tracking-tight">
+            <span class="text-foreground">hal</span><span class="text-muted-foreground">fred</span>
+          </div>
         </div>
 
         <div class="flex items-center gap-4">
@@ -483,9 +501,26 @@
       </div>
     </header>
 
-    <MessageList messages={chatState.messages} isTyping={chatState.isTyping} />
-
-    <InputBox bind:this={inputBox} onSend={handleSendMessage} disabled={!chatState.isConnected || chatState.isTyping} sessionId={chatState.currentSessionId} />
+    {#if hasMessages}
+      <!-- Normal layout with messages -->
+      <MessageList messages={chatState.messages} isTyping={chatState.isTyping} />
+      <InputBox bind:this={inputBox} onSend={handleSendMessage} disabled={!chatState.isConnected || chatState.isTyping} sessionId={chatState.currentSessionId} />
+    {:else}
+      <!-- Centered input layout -->
+      <div class="flex-1 flex flex-col items-center justify-center min-h-0 p-8">
+        <div class="text-center mb-8">
+          <h1 class="text-4xl font-medium text-foreground mb-4 tracking-tight">
+            Bienvenue, Ronan.
+          </h1>
+          <p class="text-base text-muted-foreground">
+            Comment puis-je vous aider ?
+          </p>
+        </div>
+        <div class="w-full max-w-[700px]">
+          <InputBox bind:this={inputBox} onSend={handleSendMessage} disabled={!chatState.isConnected || chatState.isTyping} sessionId={chatState.currentSessionId} />
+        </div>
+      </div>
+    {/if}
 
     <footer class="py-2 px-4 text-center text-[0.625rem] text-muted-foreground font-mono bg-background">
       v{APP_VERSION}

@@ -74,10 +74,17 @@
 
   // Determine if we should show logs section
   let showLogs = $derived($isUpdating || $backendLogs.length > 0 || $proxyLogs.length > 0);
+
+  // Auto-check for updates when dialog opens
+  $effect(() => {
+    if (open && !$isChecking && !$isUpdating) {
+      updateStore.checkForUpdates();
+    }
+  });
 </script>
 
 <Dialog.Root bind:open>
-  <Dialog.Content class="sm:max-w-[900px] max-h-[85vh] flex flex-col">
+  <Dialog.Content class="sm:max-w-[1000px] lg:max-w-[1100px] max-h-[85vh] flex flex-col">
     <Dialog.Header>
       <Dialog.Title class="flex items-center gap-2">
         <Icon icon="mynaui:refresh" class="size-5" />
