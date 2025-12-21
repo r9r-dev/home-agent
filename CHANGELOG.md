@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.21.11 (2025-12-21)
+
+Corrections et ameliorations mineures
+
 ## v0.21.10 (2025-12-21)
 
 - Correction du versioning des releases pour assurer la cohérence des numéros de version
