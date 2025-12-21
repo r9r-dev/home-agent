@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.21.13 (2025-12-21)
+
+- Ajout de documentation CLAUDE.md pour le Claude Proxy SDK
+- Correction : prévention de la boucle infinie de mise à jour après redémarrage du proxy
+
 ## v0.21.12 (2025-12-21)
 
 - Amélioration des icônes de sélection de machine
