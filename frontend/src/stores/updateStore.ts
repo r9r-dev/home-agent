@@ -336,8 +336,18 @@ function createUpdateStore() {
     checkForUpdates: async () => {
       update(s => ({ ...s, isChecking: true, status: 'checking', error: null }));
 
+      const TIMEOUT_MS = 15000;
+
       try {
-        const response = await fetch('/api/update/check');
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
+        const response = await fetch('/api/update/check', {
+          signal: controller.signal,
+        });
+
+        clearTimeout(timeoutId);
+
         if (!response.ok) {
           throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
@@ -355,7 +365,12 @@ function createUpdateStore() {
           updateAvailable: hasUpdate,
         }));
       } catch (error) {
-        const message = error instanceof Error ? error.message : 'Failed to check for updates';
+        let message = 'Failed to check for updates';
+        if (error instanceof Error) {
+          message = error.name === 'AbortError'
+            ? 'Delai d\'attente depasse (proxy non disponible?)'
+            : error.message;
+        }
         update(s => ({
           ...s,
           isChecking: false,

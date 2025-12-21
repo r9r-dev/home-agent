@@ -75,10 +75,16 @@
   // Determine if we should show logs section
   let showLogs = $derived($isUpdating || $backendLogs.length > 0 || $proxyLogs.length > 0);
 
-  // Auto-check for updates when dialog opens
+  // Track previous open state to detect when dialog opens
+  let wasOpen = $state(false);
+
+  // Auto-check for updates when dialog opens (only once per open)
   $effect(() => {
-    if (open && !$isChecking && !$isUpdating) {
+    if (open && !wasOpen) {
+      wasOpen = true;
       updateStore.checkForUpdates();
+    } else if (!open && wasOpen) {
+      wasOpen = false;
     }
   });
 </script>
