@@ -53,9 +53,20 @@ function getProxyVersion(): string {
 
 /**
  * Get the current backend version from the running container
+ * Times out after 5 seconds to prevent blocking
  */
 async function getBackendVersion(): Promise<string> {
   return new Promise((resolve) => {
+    const TIMEOUT_MS = 5000;
+    let resolved = false;
+
+    const timeout = setTimeout(() => {
+      if (!resolved) {
+        resolved = true;
+        resolve("unknown");
+      }
+    }, TIMEOUT_MS);
+
     const proc = spawn("docker", [
       "inspect",
       "--format",
@@ -69,7 +80,11 @@ async function getBackendVersion(): Promise<string> {
     });
 
     proc.on("close", (code) => {
+      if (resolved) return;
+
       if (code === 0 && output.trim() && output.trim() !== "<no value>") {
+        resolved = true;
+        clearTimeout(timeout);
         resolve(output.trim());
       } else {
         // Fallback: try to get image tag
@@ -86,31 +101,55 @@ async function getBackendVersion(): Promise<string> {
         });
 
         imgProc.on("close", () => {
+          if (resolved) return;
+          resolved = true;
+          clearTimeout(timeout);
           const match = imgOutput.match(/:([^:]+)$/);
           resolve(match ? match[1].trim() : "latest");
+        });
+
+        imgProc.on("error", () => {
+          if (resolved) return;
+          resolved = true;
+          clearTimeout(timeout);
+          resolve("unknown");
         });
       }
     });
 
-    proc.on("error", () => resolve("unknown"));
+    proc.on("error", () => {
+      if (resolved) return;
+      resolved = true;
+      clearTimeout(timeout);
+      resolve("unknown");
+    });
   });
 }
 
 /**
  * Fetch the latest release version from GitHub
+ * Times out after 10 seconds to prevent blocking
  */
 interface GitHubRelease {
   tag_name?: string;
 }
 
 async function getLatestVersion(): Promise<string | null> {
+  const TIMEOUT_MS = 10000;
+
   try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
     const response = await fetch(GITHUB_API_URL, {
       headers: {
         Accept: "application/vnd.github.v3+json",
         "User-Agent": "claude-proxy-sdk",
       },
+      signal: controller.signal,
     });
+
+    clearTimeout(timeoutId);
 
     if (!response.ok) {
       console.error(`GitHub API error: ${response.status}`);
@@ -120,7 +159,11 @@ async function getLatestVersion(): Promise<string | null> {
     const data = await response.json() as GitHubRelease;
     return data.tag_name || null;
   } catch (error) {
-    console.error("Failed to fetch latest version:", error);
+    if (error instanceof Error && error.name === "AbortError") {
+      console.error("GitHub API request timed out");
+    } else {
+      console.error("Failed to fetch latest version:", error);
+    }
     return null;
   }
 }
@@ -288,11 +331,12 @@ export async function updateBackend(
  *
  * Update process:
  * 1. Clone repo to temp directory
- * 2. Copy claude-proxy-sdk files to install dir (requires sudo)
- * 3. Run npm install && npm run build (requires sudo)
+ * 2. Copy claude-proxy-sdk files to install dir
+ * 3. Run npm install && npm run build
  * 4. Exit process (systemd will restart the service)
  *
- * Requires: sudoers config for the service user to run bash, npm without password
+ * Note: The install.sh script sets ownership of /opt/claude-proxy-sdk to the
+ * service user, so no sudo is required for file operations.
  */
 export async function updateProxy(
   onLog: LogCallback,
@@ -342,17 +386,18 @@ export async function updateProxy(
     onLog(createLog("Installing new version...", "proxy"));
 
     // Remove old files (except node_modules to speed up npm install)
+    // Note: No sudo needed - install.sh sets ownership to the service user
     await executeCommand(
       "bash",
       ["-c", `find ${INSTALL_DIR} -mindepth 1 -maxdepth 1 ! -name 'node_modules' -exec rm -rf {} +`],
-      { source: "proxy", onLog, sudo: true }
+      { source: "proxy", onLog }
     );
 
     // Copy new files
     const copyResult = await executeCommand(
       "bash",
       ["-c", `cp -r ${tmpDir}/repo/claude-proxy-sdk/* ${INSTALL_DIR}/`],
-      { source: "proxy", onLog, sudo: true }
+      { source: "proxy", onLog }
     );
 
     if (!copyResult.success) {
@@ -371,7 +416,7 @@ export async function updateProxy(
     const npmInstallResult = await executeCommand(
       "npm",
       ["install"],
-      { cwd: INSTALL_DIR, source: "proxy", onLog, sudo: true }
+      { cwd: INSTALL_DIR, source: "proxy", onLog }
     );
 
     if (!npmInstallResult.success) {
@@ -385,7 +430,7 @@ export async function updateProxy(
     const buildResult = await executeCommand(
       "npm",
       ["run", "build"],
-      { cwd: INSTALL_DIR, source: "proxy", onLog, sudo: true }
+      { cwd: INSTALL_DIR, source: "proxy", onLog }
     );
 
     if (!buildResult.success) {
