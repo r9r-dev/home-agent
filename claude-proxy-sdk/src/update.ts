@@ -457,7 +457,7 @@ export async function updateProxy(
 
     const npmInstallResult = await executeCommand(
       "npm",
-      ["install"],
+      ["install", "--include=dev"],
       { cwd: INSTALL_DIR, source: "proxy", onLog }
     );
 
