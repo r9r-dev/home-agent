@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.21.12 (2025-12-21)
+
+- Amélioration des icônes de sélection de machine
+
 ## v0.21.11 (2025-12-21)
 
 Corrections et ameliorations mineures
