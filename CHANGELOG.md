@@ -2,11 +2,13 @@
 
 ## v0.21.9 (2025-12-21)
 
-- Déplacement de TypeScript vers les dépendances de production pour les builds du proxy - Mise à jour des versions vers 0.21.9
+- Déplacement de TypeScript vers les dépendances de production pour les builds du proxy
+- Mise à jour des versions vers 0.21.9
 
 ## v0.21.8 (2025-12-21)
 
-- Mise à jour des versions vers 0.21.8 - Correction du CHANGELOG.md corrompu
+- Mise à jour des versions vers 0.21.8
+- Correction du CHANGELOG.md corrompu
 
 ## v0.21.6 (2025-12-21)
 - Mise à jour vers la version 0.21.6
