@@ -336,9 +336,7 @@ See `claude-proxy-sdk/README.md` for detailed proxy setup.
 
 ### Commit & Release Policy
 1. Update CLAUDE.md with changes
-2. For new versions:
-   - Update `frontend/package.json` version
-   - Update `claude-proxy-sdk/package.json` version
-3. Commit and push
-4. Create and push tag: `git tag v0.x.x && git push origin v0.x.x`
-5. Close related GitHub issue if any
+2. Commit and push
+3. Close related GitHub issue if any
+
+Never publish tag. User will do it instead.
