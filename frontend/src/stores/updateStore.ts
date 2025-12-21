@@ -63,6 +63,7 @@ function createUpdateStore() {
   let pollingInterval: ReturnType<typeof setInterval> | null = null;
   let backendUpdateSucceeded = false;
   let proxyNeedsUpdate = false;
+  let proxyUpdateTriggered = false; // True once proxy update has been triggered (to prevent re-triggering)
 
   // Helper to get current state synchronously
   function getState(): UpdateState {
@@ -267,10 +268,23 @@ function createUpdateStore() {
             try {
               await connectWebSocket(false);
 
-              // If proxy needs update, trigger it now
-              if (proxyNeedsUpdate) {
+              // If proxy needs update and hasn't been triggered yet
+              if (proxyNeedsUpdate && !proxyUpdateTriggered) {
+                proxyNeedsUpdate = false;
+                proxyUpdateTriggered = true; // Mark as triggered to prevent re-triggering
                 addLog(createSystemLog('Lancement de la mise a jour du proxy...'));
                 await triggerProxyUpdate();
+              } else if (proxyUpdateTriggered) {
+                // Proxy update was already triggered, we're reconnecting after proxy restart
+                // Mark update as complete
+                addLog(createSystemLog('Proxy redémarre, mise a jour terminee'));
+                update(s => ({
+                  ...s,
+                  isUpdating: false,
+                  status: 'success',
+                  proxy: { ...s.proxy, updateAvailable: false },
+                  updateAvailable: false,
+                }));
               } else {
                 // No proxy update needed, we're done
                 update(s => ({
@@ -280,13 +294,27 @@ function createUpdateStore() {
                 }));
               }
             } catch (err) {
-              addLog(createSystemLog('Echec de la reconnexion WebSocket', 'error'));
-              update(s => ({
-                ...s,
-                isUpdating: false,
-                status: 'error',
-                error: 'Echec de la reconnexion',
-              }));
+              // If proxy update was triggered, the proxy might still be restarting
+              // In this case, consider the update successful (proxy will come back up)
+              if (proxyUpdateTriggered) {
+                addLog(createSystemLog('Proxy en cours de redemarrage...'));
+                addLog(createSystemLog('Mise a jour terminee, le proxy va redemarrer'));
+                update(s => ({
+                  ...s,
+                  isUpdating: false,
+                  status: 'success',
+                  proxy: { ...s.proxy, updateAvailable: false },
+                  updateAvailable: false,
+                }));
+              } else {
+                addLog(createSystemLog('Echec de la reconnexion WebSocket', 'error'));
+                update(s => ({
+                  ...s,
+                  isUpdating: false,
+                  status: 'error',
+                  error: 'Echec de la reconnexion',
+                }));
+              }
             }
           }
         }
@@ -387,6 +415,7 @@ function createUpdateStore() {
       // Reset flags
       backendUpdateSucceeded = false;
       proxyNeedsUpdate = currentState.proxy.updateAvailable;
+      proxyUpdateTriggered = false;
 
       update(s => ({
         ...s,
