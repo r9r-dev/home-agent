@@ -1,6 +1,6 @@
 {
   "name": "claude-proxy-sdk",
-  "version": "0.21.13",
+  "version": "1.0.0",
   "description": "Claude Proxy using Claude Agent SDK",
   "type": "module",
   "main": "dist/index.js",
