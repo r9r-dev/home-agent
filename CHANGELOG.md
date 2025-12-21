@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.21.10 (2025-12-21)
+
+- Correction du versioning des releases pour assurer la cohérence des numéros de version
+- Déplacement des dépendances TypeScript de devDependencies vers dependencies pour les builds de production
+
 ## v0.21.9 (2025-12-21)
 
 - Déplacement de TypeScript vers les dépendances de production pour les builds du proxy
