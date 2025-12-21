@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.21.8 (2025-12-21)
+
+- Mise à jour des versions vers 0.21.8 - Correction du CHANGELOG.md corrompu
+
 ## v0.21.6 (2025-12-21)
 - Mise à jour vers la version 0.21.6
 - Correction des commandes npm pour les mises à jour
