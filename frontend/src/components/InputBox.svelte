@@ -276,14 +276,14 @@
           <Select.Trigger class="h-7 text-xs border-border bg-muted/50 rounded-full px-3 w-auto min-w-[100px]">
             <div class="flex items-center gap-1.5 truncate">
               {#if $selectedMachineId === 'auto' || $selectedMachineId === null}
-                <Icon icon="carbon:atom" class="size-3.5 shrink-0" />
+                <Icon icon="carbon:process" class="size-3.5 shrink-0" />
                 <span class="truncate">Auto</span>
               {:else if $selectedMachineId === ''}
                 <Icon icon="mynaui:home" class="size-3.5 shrink-0" />
                 <span class="truncate">Local</span>
               {:else}
                 <span class={$selectedMachine?.status === 'online' ? 'text-green-500' : $selectedMachine?.status === 'offline' ? 'text-red-500' : 'text-muted-foreground'}>
-                  <Icon icon="mynaui:server" class="size-3.5 shrink-0" />
+                  <Icon icon="mynaui:terminal" class="size-3.5 shrink-0" />
                 </span>
                 <span class="truncate">{$selectedMachine?.name}</span>
               {/if}
@@ -292,7 +292,7 @@
           <Select.Content>
             <Select.Item value="auto">
               <div class="flex items-center gap-2">
-                <Icon icon="carbon:atom" class="size-4" />
+                <Icon icon="carbon:process" class="size-4" />
                 Auto
               </div>
             </Select.Item>
@@ -306,7 +306,7 @@
               <Select.Item value={machine.id} disabled={machine.status === 'offline'}>
                 <div class="flex items-center gap-2">
                   <span class={machine.status === 'online' ? 'text-green-500' : machine.status === 'offline' ? 'text-red-500' : 'text-gray-500'}>
-                    <Icon icon="mynaui:server" class="size-4" />
+                    <Icon icon="mynaui:terminal" class="size-4" />
                   </span>
                   <span class="truncate">{machine.name}</span>
                 </div>

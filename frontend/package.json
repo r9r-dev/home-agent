@@ -1,6 +1,6 @@
 {
   "name": "home-agent-frontend",
-  "version": "0.21.11",
+  "version": "0.21.12",
   "type": "module",
   "scripts": {
     "dev": "vite",
