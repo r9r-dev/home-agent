@@ -151,21 +151,73 @@ func (ch *ChatHandler) HandleMessage(ctx context.Context, request MessageRequest
 		}
 	}
 
-	// Add SSH machine context if machineId is provided
+	// Add SSH machine context based on machineId
 	if request.MachineID != "" && ch.db != nil && ch.cryptoService != nil {
-		machine, err := ch.db.GetMachineWithAuth(request.MachineID)
-		if err != nil {
-			return nil, fmt.Errorf("machine not found: %s", request.MachineID)
-		}
+		if request.MachineID == "auto" {
+			// Auto mode: provide all available machines as options
+			machines, err := ch.db.ListMachines()
+			if err == nil && len(machines) > 0 {
+				var sshContext strings.Builder
+				sshContext.WriteString("<available_ssh_machines>\n")
 
-		// Decrypt auth value
-		authValue, err := ch.cryptoService.Decrypt(machine.AuthValue)
-		if err != nil {
-			return nil, fmt.Errorf("failed to decrypt machine credentials: %w", err)
-		}
+				for _, machine := range machines {
+					// Get machine with auth credentials
+					machineWithAuth, err := ch.db.GetMachineWithAuth(machine.ID)
+					if err != nil {
+						continue
+					}
 
-		// Build SSH context
-		sshContext := fmt.Sprintf(`<ssh_machine>
+					// Decrypt auth value
+					authValue, err := ch.cryptoService.Decrypt(machineWithAuth.AuthValue)
+					if err != nil {
+						continue
+					}
+
+					sshContext.WriteString(fmt.Sprintf(`<machine id="%s">
+name: %s
+description: %s
+host: %s
+port: %d
+username: %s
+auth_type: %s
+credentials: %s
+</machine>
+`, machine.ID, machine.Name, machine.Description, machine.Host, machine.Port, machine.Username, machineWithAuth.AuthType, authValue))
+				}
+
+				sshContext.WriteString("</available_ssh_machines>\n\n")
+				sshContext.WriteString(`Tu as acces a ces machines SSH distantes. Tu peux choisir d'executer des commandes:
+- En local (sans SSH)
+- Sur une des machines distantes via SSH
+
+Pour te connecter a une machine:
+- Si auth_type est "password": ssh <username>@<host> -p <port> avec le mot de passe indique
+- Si auth_type est "key": utilise la cle SSH fournie avec ssh -i <key_file> <username>@<host> -p <port>
+
+Choisis la machine appropriee selon le contexte de la demande de l'utilisateur.`)
+
+				sshContextStr := sshContext.String()
+				if fullInstructions != "" {
+					fullInstructions = sshContextStr + "\n\n" + fullInstructions
+				} else {
+					fullInstructions = sshContextStr
+				}
+			}
+		} else {
+			// Specific machine mode: force execution on this machine
+			machine, err := ch.db.GetMachineWithAuth(request.MachineID)
+			if err != nil {
+				return nil, fmt.Errorf("machine not found: %s", request.MachineID)
+			}
+
+			// Decrypt auth value
+			authValue, err := ch.cryptoService.Decrypt(machine.AuthValue)
+			if err != nil {
+				return nil, fmt.Errorf("failed to decrypt machine credentials: %w", err)
+			}
+
+			// Build SSH context
+			sshContext := fmt.Sprintf(`<ssh_machine>
 name: %s
 description: %s
 host: %s
@@ -181,21 +233,22 @@ Tu as acces a cette machine SSH distante. Pour executer des commandes sur cette 
 La cle ou le mot de passe est: %s
 
 IMPORTANT: Execute les commandes sur cette machine distante, pas en local.`,
-			machine.Name,
-			machine.Description,
-			machine.Host,
-			machine.Port,
-			machine.Username,
-			machine.AuthType,
-			machine.Username, machine.Host, machine.Port, authValue,
-			machine.Username, machine.Host, machine.Port,
-			authValue,
-		)
+				machine.Name,
+				machine.Description,
+				machine.Host,
+				machine.Port,
+				machine.Username,
+				machine.AuthType,
+				machine.Username, machine.Host, machine.Port, authValue,
+				machine.Username, machine.Host, machine.Port,
+				authValue,
+			)
 
-		if fullInstructions != "" {
-			fullInstructions = sshContext + "\n\n" + fullInstructions
-		} else {
-			fullInstructions = sshContext
+			if fullInstructions != "" {
+				fullInstructions = sshContext + "\n\n" + fullInstructions
+			} else {
+				fullInstructions = sshContext
+			}
 		}
 	}
 

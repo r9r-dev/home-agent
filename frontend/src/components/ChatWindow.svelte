@@ -245,7 +245,9 @@
       chatStore.clearThinking();
 
       chatStore.addMessage('user', content, storeAttachments);
-      websocketService.sendMessage(content, chatState.currentSessionId || undefined, chatState.selectedModel, wsAttachments, chatState.thinkingEnabled, $selectedMachineId || undefined);
+      // Send machineId: "auto" for auto mode, undefined for local, or specific machine ID
+      const machineIdToSend = $selectedMachineId === '' ? undefined : $selectedMachineId || undefined;
+      websocketService.sendMessage(content, chatState.currentSessionId || undefined, chatState.selectedModel, wsAttachments, chatState.thinkingEnabled, machineIdToSend);
       chatStore.setError(null);
     } catch (error) {
       console.error('[ChatWindow] Failed to send message:', error);

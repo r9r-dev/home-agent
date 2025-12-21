@@ -272,14 +272,30 @@
 
       <!-- Machine selector as badge -->
       {#if $machines.length > 0}
-        <Select.Root type="single" value={$selectedMachineId ?? ''} onValueChange={handleMachineChange}>
+        <Select.Root type="single" value={$selectedMachineId ?? 'auto'} onValueChange={handleMachineChange}>
           <Select.Trigger class="h-7 text-xs border-border bg-muted/50 rounded-full px-3 w-auto min-w-[100px]">
             <div class="flex items-center gap-1.5 truncate">
-              <Icon icon="mynaui:server" class="size-3.5 shrink-0" />
-              <span class="truncate">{$selectedMachine?.name || 'Local'}</span>
+              {#if $selectedMachineId === 'auto' || $selectedMachineId === null}
+                <Icon icon="carbon:atom" class="size-3.5 shrink-0" />
+                <span class="truncate">Auto</span>
+              {:else if $selectedMachineId === ''}
+                <Icon icon="mynaui:home" class="size-3.5 shrink-0" />
+                <span class="truncate">Local</span>
+              {:else}
+                <span class={$selectedMachine?.status === 'online' ? 'text-green-500' : $selectedMachine?.status === 'offline' ? 'text-red-500' : 'text-muted-foreground'}>
+                  <Icon icon="mynaui:server" class="size-3.5 shrink-0" />
+                </span>
+                <span class="truncate">{$selectedMachine?.name}</span>
+              {/if}
             </div>
           </Select.Trigger>
           <Select.Content>
+            <Select.Item value="auto">
+              <div class="flex items-center gap-2">
+                <Icon icon="carbon:atom" class="size-4" />
+                Auto
+              </div>
+            </Select.Item>
             <Select.Item value="">
               <div class="flex items-center gap-2">
                 <Icon icon="mynaui:home" class="size-4" />

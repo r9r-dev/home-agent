@@ -22,7 +22,7 @@ interface MachinesState {
 function createMachinesStore() {
   const { subscribe, update, set } = writable<MachinesState>({
     machines: [],
-    selectedMachineId: null,
+    selectedMachineId: 'auto', // Default to auto mode
     isLoading: false,
     isSaving: false,
     testingMachineIds: new Set(),
@@ -97,7 +97,7 @@ function createMachinesStore() {
         update(s => ({
           ...s,
           machines: s.machines.filter(m => m.id !== id),
-          selectedMachineId: s.selectedMachineId === id ? null : s.selectedMachineId,
+          selectedMachineId: s.selectedMachineId === id ? 'auto' : s.selectedMachineId,
           isSaving: false,
         }));
         return true;
@@ -149,7 +149,7 @@ function createMachinesStore() {
     reset: () => {
       set({
         machines: [],
-        selectedMachineId: null,
+        selectedMachineId: 'auto',
         isLoading: false,
         isSaving: false,
         testingMachineIds: new Set(),
