@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.0.0 (2025-12-21)
+
+- Ajout de la recherche textuelle complète dans les conversations
+
 ## v0.21.13 (2025-12-21)
 
 - Ajout de documentation CLAUDE.md pour le Claude Proxy SDK
