@@ -78,50 +78,28 @@ jobs:
         id: version
         run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
 
+      - name: Extract release notes from CHANGELOG
+        id: changelog
+        run: |
+          VERSION="${GITHUB_REF#refs/tags/}"
+          # Extract content between this version header and the next ## header
+          NOTES=$(awk -v ver="$VERSION" '
+            /^## / && index($0, ver) { found=1; next }
+            found && /^## / { exit }
+            found { print }
+          ' CHANGELOG.md)
+          if [ -z "$NOTES" ]; then
+            NOTES="Release $VERSION"
+          fi
+          # Handle multiline output for GitHub Actions
+          echo "NOTES<<EOF" >> $GITHUB_OUTPUT
+          echo "$NOTES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           name: Home Agent ${{ steps.version.outputs.VERSION }}
-          generate_release_notes: true
-          body: |
-            ## Home Agent ${{ steps.version.outputs.VERSION }}
-
-            ### Docker Image
-
-            ```bash
-            docker pull ghcr.io/${{ github.repository }}:${{ steps.version.outputs.VERSION }}
-            ```
-
-            ### Claude Proxy SDK Installation
-
-            Install or update Claude Proxy SDK on your host:
-
-            ```bash
-            curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/main/claude-proxy-sdk/install.sh | sudo bash
-            ```
-
-            The installer will:
-            - Install Node.js 20+ if needed
-            - Download and build the TypeScript proxy
-            - Create and start the systemd service
-            - Generate an API key for authentication
-
-            ### Uninstall Claude Proxy SDK
-
-            ```bash
-            curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/main/claude-proxy-sdk/install.sh | sudo bash -s -- --uninstall
-            ```
-
-            ### Migration from Go Proxy
-
-            If you have the old Go-based proxy installed:
-
-            ```bash
-            # Uninstall old proxy
-            curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/main/claude-proxy/install.sh | sudo bash -s -- --uninstall
-
-            # Install new TypeScript proxy
-            curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/main/claude-proxy-sdk/install.sh | sudo bash
-            ```
+          body: ${{ steps.changelog.outputs.NOTES }}
           draft: false
           prerelease: false
