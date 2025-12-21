@@ -132,10 +132,6 @@ download_source() {
     mkdir -p "${INSTALL_DIR}"
     cp -r claude-proxy-sdk/* "${INSTALL_DIR}/"
 
-    # Make directory writable by service user for self-updates
-    local run_user="${SUDO_USER:-root}"
-    chown -R "${run_user}:${run_user}" "${INSTALL_DIR}"
-
     success "Source code installed"
 }
 
@@ -156,6 +152,14 @@ install_npm() {
 
     # Remove dev dependencies
     npm prune --omit=dev
+
+    # IMPORTANT: Fix ownership AFTER npm install/build
+    # npm runs as root (via sudo) and creates files owned by root
+    # The service user needs to own these files for self-updates
+    local run_user="${SUDO_USER:-root}"
+    local run_group=$(id -gn "$run_user" 2>/dev/null || echo "root")
+    info "Setting ownership to ${run_user}:${run_group}..."
+    chown -R "${run_user}:${run_group}" "${INSTALL_DIR}"
 
     success "Build complete"
 }

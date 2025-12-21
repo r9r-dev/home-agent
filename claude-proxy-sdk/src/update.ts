@@ -326,14 +326,47 @@ export async function updateBackend(
 }
 
 /**
+ * Check if the current user has write permissions on the install directory
+ * Returns an error message if permissions are incorrect, null if OK
+ */
+async function checkPermissions(installDir: string): Promise<string | null> {
+  return new Promise((resolve) => {
+    // Try to create a test file to verify write permissions
+    const testFile = `${installDir}/.permission-test-${Date.now()}`;
+    const proc = spawn("touch", [testFile]);
+
+    proc.on("close", (code) => {
+      if (code === 0) {
+        // Clean up test file
+        spawn("rm", ["-f", testFile]);
+        resolve(null);
+      } else {
+        resolve(
+          `Permission denied on ${installDir}. ` +
+          `The install.sh script may have created files owned by root. ` +
+          `Please run this command to fix permissions:\n\n` +
+          `  sudo chown -R $(whoami) ${installDir}\n\n` +
+          `Then retry the update.`
+        );
+      }
+    });
+
+    proc.on("error", () => {
+      resolve(`Cannot verify permissions on ${installDir}`);
+    });
+  });
+}
+
+/**
  * Update the proxy SDK
  * Note: This will trigger a service restart, so the WebSocket connection will be lost
  *
  * Update process:
- * 1. Clone repo to temp directory
- * 2. Copy claude-proxy-sdk files to install dir
- * 3. Run npm install && npm run build
- * 4. Exit process (systemd will restart the service)
+ * 1. Check permissions on install directory
+ * 2. Clone repo to temp directory
+ * 3. Copy claude-proxy-sdk files to install dir
+ * 4. Run npm install && npm run build
+ * 5. Exit process (systemd will restart the service)
  *
  * Note: The install.sh script sets ownership of /opt/claude-proxy-sdk to the
  * service user, so no sudo is required for file operations.
@@ -346,6 +379,15 @@ export async function updateProxy(
   onLog(createLog("Starting proxy SDK update...", "proxy"));
 
   const INSTALL_DIR = "/opt/claude-proxy-sdk";
+
+  // Step 0: Check permissions before starting
+  onLog(createLog("Checking permissions...", "proxy"));
+  const permissionError = await checkPermissions(INSTALL_DIR);
+  if (permissionError) {
+    onLog(createLog(permissionError, "proxy", "error"));
+    onStatus("error", permissionError);
+    return;
+  }
 
   try {
     // Step 1: Create temp directory and clone
