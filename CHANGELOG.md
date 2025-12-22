@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.1.2 (2025-12-22)
+
+- Correction de l'accumulation des statistiques d'utilisation pour inclure tous les messages de l'assistant dans le proxy Claude
+
 ## v1.1.1 (2025-12-22)
 
 - Remplacement du texte d'attente par une bordure pulsante subtile
