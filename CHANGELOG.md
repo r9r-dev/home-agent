@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.0.3 (2025-12-22)
+
+- Implémentation de migrations de base de données appropriées avec golang-migrate
+- Utilisation d'une barre de progression ASCII pour une meilleure compatibilité
+- Style du badge de jalon avec for-the-badge pour une meilleure apparence
+- Amélioration du badge de jalon avec barre de progression
+- Ajout d'un badge de progression de jalon auto-mis à jour
+
 ## v1.0.2 (2025-12-22)
 
 - Refactorisation de la couche d'accès aux données avec un modèle repository par domaine
