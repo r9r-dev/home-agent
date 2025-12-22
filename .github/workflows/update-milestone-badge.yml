@@ -47,7 +47,7 @@ jobs:
             // Generate progress bar (10 segments)
             const filled = Math.round(progress / 10);
             const empty = 10 - filled;
-            const progressBar = '█'.repeat(filled) + '░'.repeat(empty);
+            const progressBar = '[' + '#'.repeat(filled) + '-'.repeat(empty) + ']';
 
             core.setOutput('title', milestone.title);
             core.setOutput('progress', progress);
