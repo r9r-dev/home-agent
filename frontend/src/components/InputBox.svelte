@@ -191,7 +191,7 @@
   {/if}
 
   <!-- Input area -->
-  <div class="flex gap-3 items-center bg-muted border border-border rounded-lg px-4 py-3 max-w-[900px] mx-auto min-h-12 transition-colors focus-within:border-ring">
+  <div class="flex gap-3 items-center bg-muted border border-border rounded-lg px-4 py-3 max-w-[900px] mx-auto min-h-12 transition-colors focus-within:border-ring" class:input-waiting={disabled}>
     <!-- Hidden file input -->
     <input
       type="file"
@@ -323,10 +323,20 @@
       <ContextUsageBar />
     </div>
   </div>
-
-  {#if disabled}
-    <p class="mt-3 text-xs text-muted-foreground text-center font-mono">
-      En attente de reponse...
-    </p>
-  {/if}
 </div>
+
+<style>
+  /* Subtle pulsing border animation when waiting for response */
+  :global(.input-waiting) {
+    animation: pulse-border 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse-border {
+    0%, 100% {
+      border-color: hsl(var(--border));
+    }
+    50% {
+      border-color: hsl(var(--muted-foreground) / 0.5);
+    }
+  }
+</style>
