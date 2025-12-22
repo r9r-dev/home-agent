@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.0.2 (2025-12-22)
+
+- Refactorisation de la couche d'accès aux données avec un modèle repository par domaine
+- Documentation mise à jour avec la nouvelle structure architecturale du projet
+
 ## v1.0.1 (2025-12-22)
 
 - Refactorisation: encapsulation de ExecutionContext en tant que classe
