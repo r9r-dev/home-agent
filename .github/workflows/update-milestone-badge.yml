@@ -44,11 +44,17 @@ jobs:
             else if (progress >= 40) color = 'yellow';
             else if (progress >= 20) color = 'orange';
 
+            // Generate progress bar (10 segments)
+            const filled = Math.round(progress / 10);
+            const empty = 10 - filled;
+            const progressBar = '█'.repeat(filled) + '░'.repeat(empty);
+
             core.setOutput('title', milestone.title);
             core.setOutput('progress', progress);
             core.setOutput('closed', milestone.closed_issues);
             core.setOutput('total', total);
             core.setOutput('color', color);
+            core.setOutput('bar', progressBar);
 
       - name: Create badge JSON
         if: steps.milestone.outputs.progress != ''
@@ -57,8 +63,8 @@ jobs:
           cat > .github/badges/milestone-1.json << EOF
           {
             "schemaVersion": 1,
-            "label": "Milestone 1",
-            "message": "${{ steps.milestone.outputs.progress }}% (${{ steps.milestone.outputs.closed }}/${{ steps.milestone.outputs.total }})",
+            "label": "${{ steps.milestone.outputs.title }}",
+            "message": "${{ steps.milestone.outputs.bar }} ${{ steps.milestone.outputs.progress }}%",
             "color": "${{ steps.milestone.outputs.color }}"
           }
           EOF
