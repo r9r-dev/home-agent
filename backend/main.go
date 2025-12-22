@@ -15,6 +15,7 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/recover"
 	"github.com/ronan/home-agent/handlers"
 	"github.com/ronan/home-agent/models"
+	"github.com/ronan/home-agent/repositories"
 	"github.com/ronan/home-agent/services"
 )
 
@@ -116,8 +117,20 @@ func main() {
 		}
 	}()
 
+	// Get the underlying SQL connection for repositories
+	sqlDB := db.GetConnection()
+
+	// Initialize repositories
+	sessionRepo := repositories.NewSessionRepository(sqlDB)
+	messageRepo := repositories.NewMessageRepository(sqlDB)
+	memoryRepo := repositories.NewMemoryRepository(sqlDB)
+	machineRepo := repositories.NewMachineRepository(sqlDB)
+	toolCallRepo := repositories.NewToolCallRepository(sqlDB)
+	settingsRepo := repositories.NewSettingsRepository(sqlDB)
+	searchRepo := repositories.NewSearchRepository(sqlDB)
+
 	// Initialize services
-	sessionManager := services.NewSessionManager(db)
+	sessionManager := services.NewSessionManager(sessionRepo, messageRepo)
 	logService := services.NewLogService(100) // Keep last 100 log entries
 
 	// Validate required configuration
@@ -140,15 +153,26 @@ func main() {
 	// Initialize crypto service for machines
 	cryptoService := services.NewCryptoService(config.DatabasePath)
 
-	// Initialize handlers
-	chatHandler := handlers.NewChatHandler(sessionManager, claudeExecutor, config.UploadDir, config.WorkspacePath, db, logService, cryptoService)
+	// Initialize handlers with repository injection
+	chatHandler := handlers.NewChatHandler(
+		sessionManager,
+		claudeExecutor,
+		config.UploadDir,
+		config.WorkspacePath,
+		settingsRepo,
+		memoryRepo,
+		machineRepo,
+		toolCallRepo,
+		logService,
+		cryptoService,
+	)
 	wsHandler := handlers.NewWebSocketHandler(chatHandler)
 	uploadHandler := handlers.NewUploadHandler(config.UploadDir)
-	memoryHandler := handlers.NewMemoryHandler(db)
+	memoryHandler := handlers.NewMemoryHandler(memoryRepo)
 	logHandler := handlers.NewLogHandler(logService)
 	updateHandler := handlers.NewUpdateHandler(config.ClaudeProxyURL, config.ClaudeProxyKey)
-	machinesHandler := handlers.NewMachinesHandler(db, cryptoService)
-	searchHandler := handlers.NewSearchHandler(db)
+	machinesHandler := handlers.NewMachinesHandler(machineRepo, cryptoService)
+	searchHandler := handlers.NewSearchHandler(searchRepo)
 
 	// Create Fiber app
 	app := fiber.New(fiber.Config{
@@ -225,7 +249,7 @@ func main() {
 	// Tool calls API (for lazy loading)
 	app.Get("/api/sessions/:id/tool-calls", func(c *fiber.Ctx) error {
 		sessionID := c.Params("id")
-		toolCalls, err := db.GetToolCallsBySession(sessionID)
+		toolCalls, err := toolCallRepo.GetBySession(sessionID)
 		if err != nil {
 			return c.Status(500).JSON(fiber.Map{"error": err.Error()})
 		}
@@ -237,7 +261,7 @@ func main() {
 
 	app.Get("/api/tool-calls/:tool_use_id", func(c *fiber.Ctx) error {
 		toolUseID := c.Params("tool_use_id")
-		toolCall, err := db.GetToolCall(toolUseID)
+		toolCall, err := toolCallRepo.Get(toolUseID)
 		if err != nil {
 			return c.Status(500).JSON(fiber.Map{"error": err.Error()})
 		}
@@ -281,7 +305,7 @@ func main() {
 
 	// Settings API
 	app.Get("/api/settings", func(c *fiber.Ctx) error {
-		settings, err := db.GetAllSettings()
+		settings, err := settingsRepo.GetAll()
 		if err != nil {
 			return c.Status(500).JSON(fiber.Map{"error": err.Error()})
 		}
@@ -303,7 +327,7 @@ func main() {
 			return c.Status(400).JSON(fiber.Map{"error": "Custom instructions must be 2000 characters or less"})
 		}
 
-		if err := db.SetSetting(key, body.Value); err != nil {
+		if err := settingsRepo.Set(key, body.Value); err != nil {
 			return c.Status(500).JSON(fiber.Map{"error": err.Error()})
 		}
 
@@ -380,8 +404,8 @@ func customErrorHandler(c *fiber.Ctx, err error) error {
 	log.Printf("Error: %v (status: %d)", err, code)
 
 	return c.Status(code).JSON(fiber.Map{
-		"error":  true,
-		"status": code,
+		"error":   true,
+		"status":  code,
 		"message": err.Error(),
 	})
 }

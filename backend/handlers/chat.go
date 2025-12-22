@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/ronan/home-agent/models"
+	"github.com/ronan/home-agent/repositories"
 	"github.com/ronan/home-agent/services"
 )
 
@@ -20,19 +20,36 @@ type ChatHandler struct {
 	claudeExecutor services.ClaudeExecutor
 	uploadDir      string // Local path for file storage
 	workspacePath  string // Path prefix for Claude CLI (if different from uploadDir)
-	db             *models.DB
+	settings       repositories.SettingsRepository
+	memory         repositories.MemoryRepository
+	machines       repositories.MachineRepository
+	toolCalls      repositories.ToolCallRepository
 	logService     *services.LogService
 	cryptoService  *services.CryptoService
 }
 
 // NewChatHandler creates a new ChatHandler instance
-func NewChatHandler(sessionManager *services.SessionManager, claudeExecutor services.ClaudeExecutor, uploadDir string, workspacePath string, db *models.DB, logService *services.LogService, cryptoService *services.CryptoService) *ChatHandler {
+func NewChatHandler(
+	sessionManager *services.SessionManager,
+	claudeExecutor services.ClaudeExecutor,
+	uploadDir string,
+	workspacePath string,
+	settings repositories.SettingsRepository,
+	memory repositories.MemoryRepository,
+	machines repositories.MachineRepository,
+	toolCalls repositories.ToolCallRepository,
+	logService *services.LogService,
+	cryptoService *services.CryptoService,
+) *ChatHandler {
 	return &ChatHandler{
 		sessionManager: sessionManager,
 		claudeExecutor: claudeExecutor,
 		uploadDir:      uploadDir,
 		workspacePath:  workspacePath,
-		db:             db,
+		settings:       settings,
+		memory:         memory,
+		machines:       machines,
+		toolCalls:      toolCalls,
 		logService:     logService,
 		cryptoService:  cryptoService,
 	}
@@ -53,20 +70,20 @@ type MessageRequest struct {
 	SessionID   string              `json:"session_id,omitempty"`
 	Model       string              `json:"model,omitempty"` // Claude model: haiku, sonnet, opus
 	Attachments []MessageAttachment `json:"attachments,omitempty"`
-	Thinking    bool                `json:"thinking,omitempty"` // Enable extended thinking mode
+	Thinking    bool                `json:"thinking,omitempty"`   // Enable extended thinking mode
 	MachineID   string              `json:"machine_id,omitempty"` // Target SSH machine ID
 }
 
 // ToolInfo represents tool information for WebSocket responses
 type ToolInfo struct {
-	ToolUseID  string                 `json:"tool_use_id"`
-	ToolName   string                 `json:"tool_name"`
-	Input      map[string]interface{} `json:"input,omitempty"`
+	ToolUseID string                 `json:"tool_use_id"`
+	ToolName  string                 `json:"tool_name"`
+	Input     map[string]interface{} `json:"input,omitempty"`
 }
 
 // MessageResponse represents a response chunk sent to the client
 type MessageResponse struct {
-	Type      string `json:"type"`       // "chunk", "thinking", "thinking_end", "done", "error", "session_id", "session_title", "tool_start", "tool_progress", "tool_result", "tool_error", "tool_input_delta"
+	Type      string `json:"type"` // "chunk", "thinking", "thinking_end", "done", "error", "session_id", "session_title", "tool_start", "tool_progress", "tool_result", "tool_error", "tool_input_delta"
 	Content   string `json:"content,omitempty"`
 	SessionID string `json:"session_id,omitempty"`
 	Title     string `json:"title,omitempty"` // Session title for session_title type
@@ -120,16 +137,16 @@ func (ch *ChatHandler) HandleMessage(ctx context.Context, request MessageRequest
 
 	// Get custom instructions from settings
 	customInstructions := ""
-	if ch.db != nil {
-		if instructions, err := ch.db.GetSetting("custom_instructions"); err == nil {
+	if ch.settings != nil {
+		if instructions, err := ch.settings.Get("custom_instructions"); err == nil {
 			customInstructions = instructions
 		}
 	}
 
 	// Get enabled memory entries and format them
 	memoryContext := ""
-	if ch.db != nil {
-		if entries, err := ch.db.GetEnabledMemoryEntries(); err == nil && len(entries) > 0 {
+	if ch.memory != nil {
+		if entries, err := ch.memory.GetEnabled(); err == nil && len(entries) > 0 {
 			memoryEntries := make([]services.MemoryEntry, len(entries))
 			for i, e := range entries {
 				memoryEntries[i] = services.MemoryEntry{
@@ -152,17 +169,17 @@ func (ch *ChatHandler) HandleMessage(ctx context.Context, request MessageRequest
 	}
 
 	// Add SSH machine context based on machineId
-	if request.MachineID != "" && ch.db != nil && ch.cryptoService != nil {
+	if request.MachineID != "" && ch.machines != nil && ch.cryptoService != nil {
 		if request.MachineID == "auto" {
 			// Auto mode: provide all available machines as options
-			machines, err := ch.db.ListMachines()
+			machines, err := ch.machines.List()
 			if err == nil && len(machines) > 0 {
 				var sshContext strings.Builder
 				sshContext.WriteString("<available_ssh_machines>\n")
 
 				for _, machine := range machines {
 					// Get machine with auth credentials
-					machineWithAuth, err := ch.db.GetMachineWithAuth(machine.ID)
+					machineWithAuth, err := ch.machines.GetWithAuth(machine.ID)
 					if err != nil {
 						continue
 					}
@@ -205,7 +222,7 @@ Choisis la machine appropriee selon le contexte de la demande de l'utilisateur.`
 			}
 		} else {
 			// Specific machine mode: force execution on this machine
-			machine, err := ch.db.GetMachineWithAuth(request.MachineID)
+			machine, err := ch.machines.GetWithAuth(request.MachineID)
 			if err != nil {
 				return nil, fmt.Errorf("machine not found: %s", request.MachineID)
 			}
@@ -415,9 +432,9 @@ func (ch *ChatHandler) processClaudeResponse(oldSessionID string, isNewConversat
 
 			log.Printf("[Chat] Received tool_start: %s (%s)", claudeResp.Tool.ToolName, claudeResp.Tool.ToolUseID)
 			// Create tool call in database
-			if claudeResp.Tool != nil && currentSessionID != "" {
+			if claudeResp.Tool != nil && currentSessionID != "" && ch.toolCalls != nil {
 				inputJSON, _ := json.Marshal(claudeResp.Tool.Input)
-				_, err := ch.db.CreateToolCall(currentSessionID, claudeResp.Tool.ToolUseID, claudeResp.Tool.ToolName, string(inputJSON))
+				_, err := ch.toolCalls.Create(currentSessionID, claudeResp.Tool.ToolUseID, claudeResp.Tool.ToolName, string(inputJSON))
 				if err != nil {
 					log.Printf("Warning: failed to create tool call: %v", err)
 				}
@@ -473,7 +490,7 @@ func (ch *ChatHandler) processClaudeResponse(oldSessionID string, isNewConversat
 			log.Printf("[Chat] Received %s for tool %s", claudeResp.Type, claudeResp.Tool.ToolUseID)
 			// Update tool call in database with input and result
 			var inputMap map[string]interface{}
-			if claudeResp.Tool != nil {
+			if claudeResp.Tool != nil && ch.toolCalls != nil {
 				status := "success"
 				if claudeResp.IsError || claudeResp.Type == "tool_error" {
 					status = "error"
@@ -482,7 +499,7 @@ func (ch *ChatHandler) processClaudeResponse(oldSessionID string, isNewConversat
 				inputJSON, _ := json.Marshal(claudeResp.Tool.Input)
 				inputMap = claudeResp.Tool.Input
 				log.Printf("[Chat] Tool %s input: %s", claudeResp.Tool.ToolUseID, string(inputJSON))
-				err := ch.db.UpdateToolCallOutput(claudeResp.Tool.ToolUseID, string(inputJSON), claudeResp.ToolOutput, status)
+				err := ch.toolCalls.UpdateOutput(claudeResp.Tool.ToolUseID, string(inputJSON), claudeResp.ToolOutput, status)
 				if err != nil {
 					log.Printf("Warning: failed to update tool call: %v", err)
 				}

@@ -6,18 +6,19 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 	"github.com/ronan/home-agent/models"
+	"github.com/ronan/home-agent/repositories"
 	"github.com/ronan/home-agent/services"
 )
 
 // MachinesHandler handles machine-related API endpoints
 type MachinesHandler struct {
-	db     *models.DB
-	crypto *services.CryptoService
+	machines repositories.MachineRepository
+	crypto   *services.CryptoService
 }
 
 // NewMachinesHandler creates a new MachinesHandler
-func NewMachinesHandler(db *models.DB, crypto *services.CryptoService) *MachinesHandler {
-	return &MachinesHandler{db: db, crypto: crypto}
+func NewMachinesHandler(machines repositories.MachineRepository, crypto *services.CryptoService) *MachinesHandler {
+	return &MachinesHandler{machines: machines, crypto: crypto}
 }
 
 // RegisterRoutes registers machine API routes
@@ -54,7 +55,7 @@ type UpdateMachineRequest struct {
 
 // List returns all machines
 func (h *MachinesHandler) List(c *fiber.Ctx) error {
-	machines, err := h.db.ListMachines()
+	machines, err := h.machines.List()
 	if err != nil {
 		log.Printf("Failed to list machines: %v", err)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -124,7 +125,7 @@ func (h *MachinesHandler) Create(c *fiber.Ctx) error {
 	// Generate UUID
 	id := uuid.New().String()
 
-	machine, err := h.db.CreateMachine(id, req.Name, req.Description, req.Host, port, req.Username, req.AuthType, encryptedAuthValue)
+	machine, err := h.machines.Create(id, req.Name, req.Description, req.Host, port, req.Username, req.AuthType, encryptedAuthValue)
 	if err != nil {
 		log.Printf("Failed to create machine: %v", err)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -147,7 +148,7 @@ func (h *MachinesHandler) Get(c *fiber.Ctx) error {
 		})
 	}
 
-	machine, err := h.db.GetMachine(id)
+	machine, err := h.machines.Get(id)
 	if err != nil {
 		log.Printf("Failed to get machine: %v", err)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -222,7 +223,7 @@ func (h *MachinesHandler) Update(c *fiber.Ctx) error {
 		})
 	}
 
-	err = h.db.UpdateMachine(id, req.Name, req.Description, req.Host, port, req.Username, req.AuthType, encryptedAuthValue)
+	err = h.machines.Update(id, req.Name, req.Description, req.Host, port, req.Username, req.AuthType, encryptedAuthValue)
 	if err != nil {
 		log.Printf("Failed to update machine: %v", err)
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
@@ -231,7 +232,7 @@ func (h *MachinesHandler) Update(c *fiber.Ctx) error {
 	}
 
 	// Return updated machine
-	machine, _ := h.db.GetMachine(id)
+	machine, _ := h.machines.Get(id)
 	return c.JSON(machine)
 }
 
@@ -244,7 +245,7 @@ func (h *MachinesHandler) Delete(c *fiber.Ctx) error {
 		})
 	}
 
-	err := h.db.DeleteMachine(id)
+	err := h.machines.Delete(id)
 	if err != nil {
 		log.Printf("Failed to delete machine: %v", err)
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
@@ -265,7 +266,7 @@ func (h *MachinesHandler) TestConnection(c *fiber.Ctx) error {
 	}
 
 	// Get machine with auth value
-	machine, err := h.db.GetMachineWithAuth(id)
+	machine, err := h.machines.GetWithAuth(id)
 	if err != nil {
 		log.Printf("Failed to get machine: %v", err)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -296,7 +297,7 @@ func (h *MachinesHandler) TestConnection(c *fiber.Ctx) error {
 	if result.Success {
 		status = "online"
 	}
-	if err := h.db.UpdateMachineStatus(id, status); err != nil {
+	if err := h.machines.UpdateStatus(id, status); err != nil {
 		log.Printf("Failed to update machine status: %v", err)
 	}
 

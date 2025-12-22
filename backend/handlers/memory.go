@@ -6,16 +6,17 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 	"github.com/ronan/home-agent/models"
+	"github.com/ronan/home-agent/repositories"
 )
 
 // MemoryHandler handles memory-related API endpoints
 type MemoryHandler struct {
-	db *models.DB
+	memory repositories.MemoryRepository
 }
 
 // NewMemoryHandler creates a new MemoryHandler
-func NewMemoryHandler(db *models.DB) *MemoryHandler {
-	return &MemoryHandler{db: db}
+func NewMemoryHandler(memory repositories.MemoryRepository) *MemoryHandler {
+	return &MemoryHandler{memory: memory}
 }
 
 // RegisterRoutes registers memory API routes
@@ -53,7 +54,7 @@ type ImportMemoryRequest struct {
 
 // List returns all memory entries
 func (h *MemoryHandler) List(c *fiber.Ctx) error {
-	entries, err := h.db.ListMemoryEntries()
+	entries, err := h.memory.List()
 	if err != nil {
 		log.Printf("Failed to list memory entries: %v", err)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -93,7 +94,7 @@ func (h *MemoryHandler) Create(c *fiber.Ctx) error {
 	// Generate UUID for the entry
 	id := uuid.New().String()
 
-	entry, err := h.db.CreateMemoryEntry(id, req.Title, req.Content)
+	entry, err := h.memory.Create(id, req.Title, req.Content)
 	if err != nil {
 		log.Printf("Failed to create memory entry: %v", err)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -113,7 +114,7 @@ func (h *MemoryHandler) Get(c *fiber.Ctx) error {
 		})
 	}
 
-	entry, err := h.db.GetMemoryEntry(id)
+	entry, err := h.memory.Get(id)
 	if err != nil {
 		log.Printf("Failed to get memory entry: %v", err)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -147,7 +148,7 @@ func (h *MemoryHandler) Update(c *fiber.Ctx) error {
 	}
 
 	// Get existing entry to preserve values if not provided
-	existing, err := h.db.GetMemoryEntry(id)
+	existing, err := h.memory.Get(id)
 	if err != nil {
 		log.Printf("Failed to get memory entry: %v", err)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -175,7 +176,7 @@ func (h *MemoryHandler) Update(c *fiber.Ctx) error {
 		enabled = *req.Enabled
 	}
 
-	err = h.db.UpdateMemoryEntry(id, title, content, enabled)
+	err = h.memory.Update(id, title, content, enabled)
 	if err != nil {
 		log.Printf("Failed to update memory entry: %v", err)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -184,7 +185,7 @@ func (h *MemoryHandler) Update(c *fiber.Ctx) error {
 	}
 
 	// Return updated entry
-	entry, _ := h.db.GetMemoryEntry(id)
+	entry, _ := h.memory.Get(id)
 	return c.JSON(entry)
 }
 
@@ -197,7 +198,7 @@ func (h *MemoryHandler) Delete(c *fiber.Ctx) error {
 		})
 	}
 
-	err := h.db.DeleteMemoryEntry(id)
+	err := h.memory.Delete(id)
 	if err != nil {
 		log.Printf("Failed to delete memory entry: %v", err)
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
@@ -210,7 +211,7 @@ func (h *MemoryHandler) Delete(c *fiber.Ctx) error {
 
 // Export returns all memory entries in a format suitable for backup
 func (h *MemoryHandler) Export(c *fiber.Ctx) error {
-	entries, err := h.db.ListMemoryEntries()
+	entries, err := h.memory.List()
 	if err != nil {
 		log.Printf("Failed to export memory entries: %v", err)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -251,7 +252,7 @@ func (h *MemoryHandler) Import(c *fiber.Ctx) error {
 		}
 
 		id := uuid.New().String()
-		_, err := h.db.CreateMemoryEntry(id, entry.Title, entry.Content)
+		_, err := h.memory.Create(id, entry.Title, entry.Content)
 		if err != nil {
 			errors = append(errors, "Failed to import: "+entry.Title)
 			continue
@@ -259,7 +260,7 @@ func (h *MemoryHandler) Import(c *fiber.Ctx) error {
 
 		// Set enabled state if different from default
 		if !entry.Enabled {
-			h.db.UpdateMemoryEntry(id, entry.Title, entry.Content, false)
+			h.memory.Update(id, entry.Title, entry.Content, false)
 		}
 
 		imported++

@@ -5,16 +5,17 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/ronan/home-agent/models"
+	"github.com/ronan/home-agent/repositories"
 )
 
 // SearchHandler handles search-related API endpoints
 type SearchHandler struct {
-	db *models.DB
+	search repositories.SearchRepository
 }
 
 // NewSearchHandler creates a new SearchHandler
-func NewSearchHandler(db *models.DB) *SearchHandler {
-	return &SearchHandler{db: db}
+func NewSearchHandler(search repositories.SearchRepository) *SearchHandler {
+	return &SearchHandler{search: search}
 }
 
 // SearchResponse represents the search API response
@@ -51,7 +52,7 @@ func (h *SearchHandler) Search(c *fiber.Ctx) error {
 		offset = 0
 	}
 
-	results, total, err := h.db.SearchMessages(query, limit, offset)
+	results, total, err := h.search.SearchMessages(query, limit, offset)
 	if err != nil {
 		log.Printf("Search failed: %v", err)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
