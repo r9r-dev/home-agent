@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.1.3 (2025-12-23)
+
+Corrections et ameliorations mineures
+
 ## v1.1.2 (2025-12-22)
 
 - Correction de l'accumulation des statistiques d'utilisation pour inclure tous les messages de l'assistant dans le proxy Claude
