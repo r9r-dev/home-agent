@@ -5,7 +5,7 @@
  * to properly correlate SDK events during message processing.
  */
 
-import type { ToolCallInfo } from "../types.js";
+import type { ToolCallInfo, UsageInfo } from "../types.js";
 
 export class ExecutionContext {
   /** Track active tool calls by content block index */
@@ -19,6 +19,17 @@ export class ExecutionContext {
 
   /** Track if we've received streaming content to avoid duplicates */
   private _hasReceivedStreamContent = false;
+
+  /** Track processed message IDs to deduplicate usage */
+  private processedMessageIds = new Set<string>();
+
+  /** Accumulated usage from all turns */
+  private accumulatedUsage: UsageInfo = {
+    input_tokens: 0,
+    output_tokens: 0,
+    cache_creation_input_tokens: 0,
+    cache_read_input_tokens: 0,
+  };
 
   /**
    * Check if streaming content has been received
@@ -130,5 +141,41 @@ export class ExecutionContext {
    */
   getIndexByToolUseId(toolUseId: string): number | undefined {
     return this.toolUseIdToIndex.get(toolUseId);
+  }
+
+  /**
+   * Add usage from an assistant message (deduplicated by message ID)
+   * @param messageId - Message ID from SDK
+   * @param usage - Usage object from the message
+   */
+  addUsage(messageId: string, usage: { input_tokens?: number; output_tokens?: number; cache_creation_input_tokens?: number; cache_read_input_tokens?: number }): void {
+    // Skip if already processed this message ID (handles parallel tool uses)
+    if (this.processedMessageIds.has(messageId)) {
+      return;
+    }
+    this.processedMessageIds.add(messageId);
+
+    // Accumulate usage
+    this.accumulatedUsage.input_tokens += usage.input_tokens || 0;
+    this.accumulatedUsage.output_tokens += usage.output_tokens || 0;
+    this.accumulatedUsage.cache_creation_input_tokens = (this.accumulatedUsage.cache_creation_input_tokens || 0) + (usage.cache_creation_input_tokens || 0);
+    this.accumulatedUsage.cache_read_input_tokens = (this.accumulatedUsage.cache_read_input_tokens || 0) + (usage.cache_read_input_tokens || 0);
+
+    console.log(`[Usage] Added from ${messageId}: in=${usage.input_tokens}, out=${usage.output_tokens}, cumulative: in=${this.accumulatedUsage.input_tokens}, out=${this.accumulatedUsage.output_tokens}`);
+  }
+
+  /**
+   * Get accumulated usage from all turns
+   * @returns Total accumulated usage
+   */
+  getAccumulatedUsage(): UsageInfo {
+    return { ...this.accumulatedUsage };
+  }
+
+  /**
+   * Check if we have any accumulated usage
+   */
+  hasUsage(): boolean {
+    return this.accumulatedUsage.input_tokens > 0 || this.accumulatedUsage.output_tokens > 0;
   }
 }

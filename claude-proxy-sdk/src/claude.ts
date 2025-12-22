@@ -231,6 +231,12 @@ function processMessage(message: SDKMessage, ctx: ExecutionContext, sessionId?: 
       break;
 
     case "assistant":
+      // Track usage from assistant messages (deduplicated by message ID)
+      const assistantMsg = message as { type: "assistant"; id?: string; usage?: { input_tokens?: number; output_tokens?: number; cache_creation_input_tokens?: number; cache_read_input_tokens?: number } };
+      if (assistantMsg.id && assistantMsg.usage) {
+        ctx.addUsage(assistantMsg.id, assistantMsg.usage);
+      }
+
       // Skip full assistant message if we already streamed the content
       // This avoids duplicating the response
       if (ctx.hasReceivedStreamContent) {
@@ -418,11 +424,32 @@ function processMessage(message: SDKMessage, ctx: ExecutionContext, sessionId?: 
       break;
 
     case "result":
-      // Final result contains usage information
-      // Access properties dynamically as SDK types may vary
+      // Final result - use accumulated usage from all assistant messages
+      // The result message may also contain usage, but we prefer our accumulated values
+      // as they are guaranteed to include all turns
       const resultAny = message as unknown as Record<string, unknown>;
       const resultUsage = resultAny.usage as Record<string, number> | undefined;
-      if (resultUsage) {
+
+      // Get accumulated usage from context
+      const accumulatedUsage = ctx.getAccumulatedUsage();
+
+      // Use accumulated usage if available, otherwise fall back to result usage
+      if (ctx.hasUsage()) {
+        // Use accumulated usage (more reliable for multi-turn conversations)
+        const usage: UsageInfo = {
+          input_tokens: accumulatedUsage.input_tokens,
+          output_tokens: accumulatedUsage.output_tokens,
+          cache_creation_input_tokens: accumulatedUsage.cache_creation_input_tokens,
+          cache_read_input_tokens: accumulatedUsage.cache_read_input_tokens,
+          total_cost_usd: resultAny.total_cost_usd as number | undefined,
+        };
+        console.log(`[Usage] ACCUMULATED - Input: ${usage.input_tokens}, Output: ${usage.output_tokens}, Cost: $${usage.total_cost_usd?.toFixed(4) || 'N/A'}`);
+        return {
+          type: "usage",
+          usage,
+        };
+      } else if (resultUsage) {
+        // Fallback to result usage (single-turn or no assistant messages tracked)
         const usage: UsageInfo = {
           input_tokens: resultUsage.input_tokens || 0,
           output_tokens: resultUsage.output_tokens || 0,
@@ -430,7 +457,7 @@ function processMessage(message: SDKMessage, ctx: ExecutionContext, sessionId?: 
           cache_read_input_tokens: resultUsage.cache_read_input_tokens,
           total_cost_usd: resultAny.total_cost_usd as number | undefined,
         };
-        console.log(`[Usage] Input: ${usage.input_tokens}, Output: ${usage.output_tokens}, Cost: $${usage.total_cost_usd?.toFixed(4) || 'N/A'}`);
+        console.log(`[Usage] FROM RESULT - Input: ${usage.input_tokens}, Output: ${usage.output_tokens}, Cost: $${usage.total_cost_usd?.toFixed(4) || 'N/A'}`);
         return {
           type: "usage",
           usage,
