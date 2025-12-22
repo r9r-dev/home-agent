@@ -6,18 +6,7 @@
 import { query, type Options, type SDKMessage, type PreToolUseHookInput, type PostToolUseHookInput } from "@anthropic-ai/claude-agent-sdk";
 import type { ProxyRequest, ProxyResponse, ToolCallInfo } from "./types.js";
 import { auditLog } from "./hooks/audit.js";
-
-// Execution context for tracking tool calls within a single execution
-interface ExecutionContext {
-  // Track active tool calls by index (for correlating content blocks)
-  activeToolCalls: Map<number, ToolCallInfo>;
-  // Track accumulated input JSON strings by tool index
-  activeToolInputs: Map<number, string>;
-  // Map tool_use_id to index for correlating results
-  toolUseIdToIndex: Map<string, number>;
-  // Track if we've received streaming content to avoid duplicates
-  hasReceivedStreamContent: boolean;
-}
+import { ExecutionContext } from "./context/ExecutionContext.js";
 
 // System prompt for Home Agent
 const SYSTEM_PROMPT = `You are a helpful personal assistant named Halfred, running on the user's home server.
@@ -75,12 +64,7 @@ export async function* executePrompt(
   } = request;
 
   // Create execution context local to this request
-  const ctx: ExecutionContext = {
-    activeToolCalls: new Map(),
-    activeToolInputs: new Map(),
-    toolUseIdToIndex: new Map(),
-    hasReceivedStreamContent: false,
-  };
+  const ctx = new ExecutionContext();
 
   // Build system prompt with custom instructions
   let systemPrompt = SYSTEM_PROMPT;
@@ -226,8 +210,8 @@ function processMessage(message: SDKMessage, ctx: ExecutionContext, sessionId?: 
   switch (message.type) {
     case "system":
       if (message.subtype === "init") {
-        // Reset streaming flag for new session (context is already fresh)
-        ctx.hasReceivedStreamContent = false;
+        // Reset context for new session
+        ctx.resetForNewMessage();
         // Capture session ID from init message
         return {
           type: "session_id",
@@ -271,10 +255,7 @@ function processMessage(message: SDKMessage, ctx: ExecutionContext, sessionId?: 
       // Block indices reset for each new message, so we need to clear our mappings
       // to avoid correlating with stale data from previous turns
       if (event.type === "message_start") {
-        ctx.hasReceivedStreamContent = false;
-        ctx.activeToolCalls.clear();
-        ctx.activeToolInputs.clear();
-        ctx.toolUseIdToIndex.clear();
+        ctx.resetForNewMessage();
       }
 
       // Handle content_block_start for tool_use
@@ -288,8 +269,7 @@ function processMessage(message: SDKMessage, ctx: ExecutionContext, sessionId?: 
           };
           // Store for later correlation
           const index = (event as { index: number }).index;
-          ctx.activeToolCalls.set(index, toolInfo);
-          ctx.toolUseIdToIndex.set(contentBlock.id, index);
+          ctx.registerToolCall(index, toolInfo);
 
           return {
             type: "tool_start",
@@ -305,13 +285,13 @@ function processMessage(message: SDKMessage, ctx: ExecutionContext, sessionId?: 
         const blockIndex = eventWithIndex.index;
 
         if (delta.type === "text_delta" && "text" in delta) {
-          ctx.hasReceivedStreamContent = true;
+          ctx.markStreamContentReceived();
           return {
             type: "chunk",
             content: delta.text,
           };
         } else if (delta.type === "thinking_delta" && "thinking" in delta) {
-          ctx.hasReceivedStreamContent = true;
+          ctx.markStreamContentReceived();
           return {
             type: "thinking",
             content: delta.thinking as string,
@@ -319,11 +299,10 @@ function processMessage(message: SDKMessage, ctx: ExecutionContext, sessionId?: 
         } else if (delta.type === "input_json_delta" && "partial_json" in delta) {
           // Accumulate input JSON delta
           const partialJson = delta.partial_json as string;
-          const currentInput = ctx.activeToolInputs.get(blockIndex) || "";
-          ctx.activeToolInputs.set(blockIndex, currentInput + partialJson);
+          ctx.appendToolInput(blockIndex, partialJson);
 
           // Get the tool info for this block
-          const toolInfo = ctx.activeToolCalls.get(blockIndex);
+          const toolInfo = ctx.getToolCall(blockIndex);
           if (toolInfo) {
             return {
               type: "tool_input_delta",
@@ -341,10 +320,10 @@ function processMessage(message: SDKMessage, ctx: ExecutionContext, sessionId?: 
       // Handle content_block_stop - tool input is complete
       if (event.type === "content_block_stop") {
         const stopEvent = event as { type: "content_block_stop"; index: number };
-        const toolInfo = ctx.activeToolCalls.get(stopEvent.index);
+        const toolInfo = ctx.getToolCall(stopEvent.index);
         if (toolInfo) {
           // Parse the accumulated input
-          const inputJsonStr = ctx.activeToolInputs.get(stopEvent.index);
+          const inputJsonStr = ctx.getAccumulatedInputRaw(stopEvent.index);
           if (inputJsonStr) {
             try {
               const parsedInput = JSON.parse(inputJsonStr);
@@ -408,26 +387,8 @@ function processMessage(message: SDKMessage, ctx: ExecutionContext, sessionId?: 
             }
 
             // Get accumulated input for this tool call
-            const toolIndex = ctx.toolUseIdToIndex.get(toolUseId);
-            let accumulatedInput: Record<string, unknown> = {};
-            let toolName = "";
-
-            if (toolIndex !== undefined) {
-              // Parse accumulated input JSON
-              const inputJsonStr = ctx.activeToolInputs.get(toolIndex);
-              if (inputJsonStr) {
-                try {
-                  accumulatedInput = JSON.parse(inputJsonStr);
-                } catch {
-                  // If parsing fails, leave as empty object
-                }
-              }
-              // Get tool name from stored info
-              const toolInfo = ctx.activeToolCalls.get(toolIndex);
-              if (toolInfo) {
-                toolName = toolInfo.tool_name;
-              }
-            }
+            const accumulatedInput = ctx.getAccumulatedInput(toolUseId) || {};
+            const toolName = ctx.getToolName(toolUseId);
 
             console.log(`[SDK] Tool result for ${toolName} (${toolUseId}): error=${isError}, output_len=${toolOutput.length}`);
 
