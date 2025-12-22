@@ -11,4 +11,8 @@ type Session struct {
 	Model           string    `json:"model"`             // Claude model: haiku, sonnet, opus
 	CreatedAt       time.Time `json:"created_at"`
 	LastActivity    time.Time `json:"last_activity"`
+	// Usage tracking
+	InputTokens  int     `json:"input_tokens"`
+	OutputTokens int     `json:"output_tokens"`
+	TotalCostUSD float64 `json:"total_cost_usd"`
 }

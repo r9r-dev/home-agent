@@ -17,7 +17,7 @@ var migrationsFS embed.FS
 
 // LatestVersion is the current migration version
 // Update this when adding new migrations
-const LatestVersion = 8
+const LatestVersion = 9
 
 // Migrate runs database migrations
 func (db *DB) Migrate() error {

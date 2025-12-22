@@ -13,9 +13,18 @@ type ToolCallInfo struct {
 	ParentToolUseID string                 `json:"parent_tool_use_id,omitempty"`
 }
 
+// UsageInfo represents token usage information
+type UsageInfo struct {
+	InputTokens              int     `json:"input_tokens"`
+	OutputTokens             int     `json:"output_tokens"`
+	CacheCreationInputTokens int     `json:"cache_creation_input_tokens,omitempty"`
+	CacheReadInputTokens     int     `json:"cache_read_input_tokens,omitempty"`
+	TotalCostUSD             float64 `json:"total_cost_usd,omitempty"`
+}
+
 // ClaudeResponse represents a chunk of text from Claude's response
 type ClaudeResponse struct {
-	Type      string // "chunk", "thinking", "done", "error", "session_id", "tool_start", "tool_progress", "tool_result", "tool_error", "tool_input_delta"
+	Type      string // "chunk", "thinking", "done", "error", "session_id", "tool_start", "tool_progress", "tool_result", "tool_error", "tool_input_delta", "usage"
 	Content   string
 	SessionID string
 	Error     error
@@ -25,6 +34,8 @@ type ClaudeResponse struct {
 	ToolOutput         string
 	IsError            bool
 	InputDelta         string // JSON delta for streaming tool input
+	// Usage information
+	Usage *UsageInfo
 }
 
 // ClaudeExecutor is the interface for executing Claude CLI commands

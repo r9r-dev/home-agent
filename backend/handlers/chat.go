@@ -81,9 +81,18 @@ type ToolInfo struct {
 	Input     map[string]interface{} `json:"input,omitempty"`
 }
 
+// UsageInfo represents token usage information for the client
+type UsageInfo struct {
+	InputTokens              int     `json:"input_tokens"`
+	OutputTokens             int     `json:"output_tokens"`
+	CacheCreationInputTokens int     `json:"cache_creation_input_tokens,omitempty"`
+	CacheReadInputTokens     int     `json:"cache_read_input_tokens,omitempty"`
+	TotalCostUSD             float64 `json:"total_cost_usd,omitempty"`
+}
+
 // MessageResponse represents a response chunk sent to the client
 type MessageResponse struct {
-	Type      string `json:"type"` // "chunk", "thinking", "thinking_end", "done", "error", "session_id", "session_title", "tool_start", "tool_progress", "tool_result", "tool_error", "tool_input_delta"
+	Type      string `json:"type"` // "chunk", "thinking", "thinking_end", "done", "error", "session_id", "session_title", "tool_start", "tool_progress", "tool_result", "tool_error", "tool_input_delta", "usage"
 	Content   string `json:"content,omitempty"`
 	SessionID string `json:"session_id,omitempty"`
 	Title     string `json:"title,omitempty"` // Session title for session_title type
@@ -94,6 +103,8 @@ type MessageResponse struct {
 	ToolOutput         string    `json:"tool_output,omitempty"`
 	IsError            bool      `json:"is_error,omitempty"`
 	InputDelta         string    `json:"input_delta,omitempty"` // JSON delta for streaming tool input
+	// Usage information
+	Usage *UsageInfo `json:"usage,omitempty"`
 }
 
 // HandleMessage processes a user message and streams Claude's response
@@ -484,6 +495,36 @@ func (ch *ChatHandler) processClaudeResponse(oldSessionID string, isNewConversat
 				Type:       "tool_input_delta",
 				Tool:       toolInfo,
 				InputDelta: claudeResp.InputDelta,
+			}
+
+		case "usage":
+			// Forward usage information to client and save to database
+			if claudeResp.Usage != nil {
+				log.Printf("[Chat] Received usage: input=%d, output=%d, cost=$%.4f",
+					claudeResp.Usage.InputTokens, claudeResp.Usage.OutputTokens, claudeResp.Usage.TotalCostUSD)
+
+				// Save usage to database
+				if currentSessionID != "" {
+					if err := ch.sessionManager.UpdateSessionUsage(
+						currentSessionID,
+						claudeResp.Usage.InputTokens,
+						claudeResp.Usage.OutputTokens,
+						claudeResp.Usage.TotalCostUSD,
+					); err != nil {
+						log.Printf("Warning: failed to save session usage: %v", err)
+					}
+				}
+
+				responseChan <- MessageResponse{
+					Type: "usage",
+					Usage: &UsageInfo{
+						InputTokens:              claudeResp.Usage.InputTokens,
+						OutputTokens:             claudeResp.Usage.OutputTokens,
+						CacheCreationInputTokens: claudeResp.Usage.CacheCreationInputTokens,
+						CacheReadInputTokens:     claudeResp.Usage.CacheReadInputTokens,
+						TotalCostUSD:             claudeResp.Usage.TotalCostUSD,
+					},
+				}
 			}
 
 		case "tool_result", "tool_error":

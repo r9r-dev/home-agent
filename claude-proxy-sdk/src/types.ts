@@ -22,11 +22,20 @@ export interface ToolCallInfo {
   parent_tool_use_id?: string | null;
 }
 
+// Token usage information
+export interface UsageInfo {
+  input_tokens: number;
+  output_tokens: number;
+  cache_creation_input_tokens?: number;
+  cache_read_input_tokens?: number;
+  total_cost_usd?: number;
+}
+
 // Response to Home Agent backend
 export interface ProxyResponse {
   type: "chunk" | "thinking" | "session_id" | "done" | "error"
       | "tool_start" | "tool_progress" | "tool_result" | "tool_error"
-      | "tool_input_delta";
+      | "tool_input_delta" | "usage";
   content?: string;
   session_id?: string;
   error?: string;
@@ -37,6 +46,8 @@ export interface ProxyResponse {
   is_error?: boolean;
   // Tool input streaming
   input_delta?: string;  // JSON delta for input streaming
+  // Usage information
+  usage?: UsageInfo;
 }
 
 // Configuration

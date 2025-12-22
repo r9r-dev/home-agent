@@ -50,18 +50,29 @@ type ProxyToolInfo struct {
 	ParentToolUseID string                 `json:"parent_tool_use_id,omitempty"`
 }
 
+// ProxyUsageInfo represents token usage from proxy
+type ProxyUsageInfo struct {
+	InputTokens              int     `json:"input_tokens"`
+	OutputTokens             int     `json:"output_tokens"`
+	CacheCreationInputTokens int     `json:"cache_creation_input_tokens,omitempty"`
+	CacheReadInputTokens     int     `json:"cache_read_input_tokens,omitempty"`
+	TotalCostUSD             float64 `json:"total_cost_usd,omitempty"`
+}
+
 // ProxyResponse represents a response from the proxy
 type ProxyResponse struct {
-	Type      string `json:"type"`                 // "chunk", "thinking", "done", "error", "session_id", "tool_start", "tool_progress", "tool_result", "tool_error", "tool_input_delta"
+	Type      string `json:"type"`                 // "chunk", "thinking", "done", "error", "session_id", "tool_start", "tool_progress", "tool_result", "tool_error", "tool_input_delta", "usage"
 	Content   string `json:"content,omitempty"`    // Response content
 	SessionID string `json:"session_id,omitempty"` // Session ID from Claude
 	Error     string `json:"error,omitempty"`      // Error message
 	// Tool-specific fields
-	Tool               *ProxyToolInfo `json:"tool,omitempty"`
-	ElapsedTimeSeconds float64        `json:"elapsed_time_seconds,omitempty"`
-	ToolOutput         string         `json:"tool_output,omitempty"`
-	IsError            bool           `json:"is_error,omitempty"`
-	InputDelta         string         `json:"input_delta,omitempty"` // JSON delta for streaming tool input
+	Tool               *ProxyToolInfo  `json:"tool,omitempty"`
+	ElapsedTimeSeconds float64         `json:"elapsed_time_seconds,omitempty"`
+	ToolOutput         string          `json:"tool_output,omitempty"`
+	IsError            bool            `json:"is_error,omitempty"`
+	InputDelta         string          `json:"input_delta,omitempty"` // JSON delta for streaming tool input
+	// Usage information
+	Usage *ProxyUsageInfo `json:"usage,omitempty"`
 }
 
 // TitleRequest represents a request to generate a title
@@ -248,6 +259,21 @@ func (pce *ProxyClaudeExecutor) ExecuteClaude(ctx context.Context, prompt string
 					Type:       "tool_input_delta",
 					Tool:       toolInfo,
 					InputDelta: response.InputDelta,
+				}
+
+			case "usage":
+				// Token usage information
+				if response.Usage != nil {
+					responseChan <- ClaudeResponse{
+						Type: "usage",
+						Usage: &UsageInfo{
+							InputTokens:              response.Usage.InputTokens,
+							OutputTokens:             response.Usage.OutputTokens,
+							CacheCreationInputTokens: response.Usage.CacheCreationInputTokens,
+							CacheReadInputTokens:     response.Usage.CacheReadInputTokens,
+							TotalCostUSD:             response.Usage.TotalCostUSD,
+						},
+					}
 				}
 			}
 		}

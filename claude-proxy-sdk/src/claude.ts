@@ -4,7 +4,7 @@
  */
 
 import { query, type Options, type SDKMessage, type PreToolUseHookInput, type PostToolUseHookInput } from "@anthropic-ai/claude-agent-sdk";
-import type { ProxyRequest, ProxyResponse, ToolCallInfo } from "./types.js";
+import type { ProxyRequest, ProxyResponse, ToolCallInfo, UsageInfo } from "./types.js";
 import { auditLog } from "./hooks/audit.js";
 import { ExecutionContext } from "./context/ExecutionContext.js";
 
@@ -418,7 +418,24 @@ function processMessage(message: SDKMessage, ctx: ExecutionContext, sessionId?: 
       break;
 
     case "result":
-      // Final result - don't send as we handle this separately
+      // Final result contains usage information
+      // Access properties dynamically as SDK types may vary
+      const resultAny = message as unknown as Record<string, unknown>;
+      const resultUsage = resultAny.usage as Record<string, number> | undefined;
+      if (resultUsage) {
+        const usage: UsageInfo = {
+          input_tokens: resultUsage.input_tokens || 0,
+          output_tokens: resultUsage.output_tokens || 0,
+          cache_creation_input_tokens: resultUsage.cache_creation_input_tokens,
+          cache_read_input_tokens: resultUsage.cache_read_input_tokens,
+          total_cost_usd: resultAny.total_cost_usd as number | undefined,
+        };
+        console.log(`[Usage] Input: ${usage.input_tokens}, Output: ${usage.output_tokens}, Cost: $${usage.total_cost_usd?.toFixed(4) || 'N/A'}`);
+        return {
+          type: "usage",
+          usage,
+        };
+      }
       break;
   }
 

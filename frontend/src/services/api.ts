@@ -11,6 +11,10 @@ export interface Session {
   model: ClaudeModel;
   created_at: string;
   last_activity: string;
+  // Usage tracking
+  input_tokens: number;
+  output_tokens: number;
+  total_cost_usd: number;
 }
 
 export interface Message {

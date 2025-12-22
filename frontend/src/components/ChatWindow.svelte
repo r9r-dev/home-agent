@@ -9,6 +9,7 @@
   import { fetchMessages, fetchSession, updateSessionModel, fetchSettings, updateSetting, fetchToolCalls, type Message as ApiMessage, type UploadedFile, type ToolCallRecord } from '../services/api';
   import { selectedMachineId } from '../stores/machinesStore';
   import { drawerStore } from '../stores/sidebarStore';
+  import { usageStore } from '../stores/usageStore';
   import MessageList from './MessageList.svelte';
   import InputBox from './InputBox.svelte';
   import Sidebar from './Sidebar.svelte';
@@ -18,6 +19,7 @@
   import SearchDialog from './SearchDialog.svelte';
   import LogIndicator from './LogIndicator.svelte';
   import LogPanel from './LogPanel.svelte';
+  import UsagePanel from './UsagePanel.svelte';
   import { updateAvailable } from '../stores/updateStore';
   import { Badge } from "$lib/components/ui/badge";
   import { Button } from "$lib/components/ui/button";
@@ -177,6 +179,12 @@
         }
         break;
 
+      case 'usage':
+        if (data.usage) {
+          usageStore.updateUsage(data.usage);
+        }
+        break;
+
       default:
         console.warn('[ChatWindow] Unknown message type:', data.type);
     }
@@ -280,6 +288,13 @@
         fetchToolCalls(sessionId),
       ]);
 
+      // Initialize usage from session data (or clear if no data)
+      if (session.input_tokens > 0 || session.output_tokens > 0) {
+        usageStore.initFromSession(session.input_tokens, session.output_tokens, session.total_cost_usd);
+      } else {
+        usageStore.clearUsage();
+      }
+
       // Combine messages and tool calls to assign orderIndex based on chronological order
       const allItems: { type: 'message' | 'tool'; timestamp: Date; data: unknown }[] = [];
 
@@ -350,6 +365,7 @@
   function handleNewConversation() {
     chatStore.clearMessages();
     chatStore.clearToolCalls();
+    usageStore.clearUsage();
     if (inputBox) {
       inputBox.focus();
     }
@@ -597,6 +613,9 @@
 
 <!-- Log Panel -->
 <LogPanel bind:open={logPanelOpen} />
+
+<!-- Usage Panel -->
+<UsagePanel />
 
 <!-- Toast notifications -->
 <Toaster position="bottom-right" richColors />

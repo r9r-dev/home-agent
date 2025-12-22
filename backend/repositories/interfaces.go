@@ -15,6 +15,7 @@ type SessionRepository interface {
 	UpdateModel(sessionID, model string) error
 	UpdateClaudeSessionID(sessionID, claudeSessionID string) error
 	UpdateSessionID(oldSessionID, newSessionID string) error
+	UpdateUsage(sessionID string, inputTokens, outputTokens int, totalCostUSD float64) error
 	Delete(sessionID string) error
 }
 

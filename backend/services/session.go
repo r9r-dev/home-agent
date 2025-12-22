@@ -147,3 +147,11 @@ func GenerateTitle(content string) string {
 	}
 	return title
 }
+
+// UpdateSessionUsage updates the usage statistics for a session
+func (sm *SessionManager) UpdateSessionUsage(sessionID string, inputTokens, outputTokens int, totalCostUSD float64) error {
+	if err := sm.sessions.UpdateUsage(sessionID, inputTokens, outputTokens, totalCostUSD); err != nil {
+		return fmt.Errorf("failed to update session usage: %w", err)
+	}
+	return nil
+}

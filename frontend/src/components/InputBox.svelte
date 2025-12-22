@@ -6,6 +6,7 @@
   import Icon from "@iconify/svelte";
   import { uploadFile, type UploadedFile } from '../services/api';
   import { machinesStore, machines, selectedMachineId, selectedMachine } from '../stores/machinesStore';
+  import ContextUsageBar from './ContextUsageBar.svelte';
 
   // Props
   interface Props {
@@ -243,9 +244,9 @@
     </Button>
   </div>
 
-  <!-- Attachments and Machine selector (below input) -->
-  {#if attachments.length > 0 || $machines.length > 0}
-    <div class="flex flex-wrap items-center gap-2 max-w-[900px] mx-auto mt-3 px-1">
+  <!-- Attachments, Machine selector, and Usage bar (below input) -->
+  <div class="flex flex-wrap items-center gap-2 max-w-[900px] mx-auto mt-3 px-1">
+    {#if attachments.length > 0 || $machines.length > 0}
       <!-- Attachment chips -->
       {#each attachments as attachment, index (attachment.id)}
         <div class="flex items-center gap-1.5 bg-muted/50 border border-border rounded-full px-3 py-1 text-xs">
@@ -315,8 +316,13 @@
           </Select.Content>
         </Select.Root>
       {/if}
+    {/if}
+
+    <!-- Usage bar (aligned right) -->
+    <div class="ml-auto">
+      <ContextUsageBar />
     </div>
-  {/if}
+  </div>
 
   {#if disabled}
     <p class="mt-3 text-xs text-muted-foreground text-center font-mono">

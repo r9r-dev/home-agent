@@ -59,7 +59,8 @@ func (r *SQLiteSessionRepository) CreateWithModel(sessionID, model string) (*mod
 // Get retrieves a session by its session ID
 func (r *SQLiteSessionRepository) Get(sessionID string) (*models.Session, error) {
 	query := `
-	SELECT id, session_id, COALESCE(claude_session_id, ''), title, COALESCE(model, 'haiku'), created_at, last_activity
+	SELECT id, session_id, COALESCE(claude_session_id, ''), title, COALESCE(model, 'haiku'), created_at, last_activity,
+	       COALESCE(input_tokens, 0), COALESCE(output_tokens, 0), COALESCE(total_cost_usd, 0)
 	FROM sessions
 	WHERE session_id = ?
 	`
@@ -73,6 +74,9 @@ func (r *SQLiteSessionRepository) Get(sessionID string) (*models.Session, error)
 		&session.Model,
 		&session.CreatedAt,
 		&session.LastActivity,
+		&session.InputTokens,
+		&session.OutputTokens,
+		&session.TotalCostUSD,
 	)
 
 	if err == sql.ErrNoRows {
@@ -89,7 +93,8 @@ func (r *SQLiteSessionRepository) Get(sessionID string) (*models.Session, error)
 // List retrieves all sessions ordered by last activity
 func (r *SQLiteSessionRepository) List() ([]*models.Session, error) {
 	query := `
-	SELECT id, session_id, COALESCE(claude_session_id, ''), title, COALESCE(model, 'haiku'), created_at, last_activity
+	SELECT id, session_id, COALESCE(claude_session_id, ''), title, COALESCE(model, 'haiku'), created_at, last_activity,
+	       COALESCE(input_tokens, 0), COALESCE(output_tokens, 0), COALESCE(total_cost_usd, 0)
 	FROM sessions
 	ORDER BY last_activity DESC
 	`
@@ -111,6 +116,9 @@ func (r *SQLiteSessionRepository) List() ([]*models.Session, error) {
 			&session.Model,
 			&session.CreatedAt,
 			&session.LastActivity,
+			&session.InputTokens,
+			&session.OutputTokens,
+			&session.TotalCostUSD,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan session: %w", err)
@@ -300,5 +308,30 @@ func (r *SQLiteSessionRepository) Delete(sessionID string) error {
 	}
 
 	log.Printf("Deleted session: %s", sessionID)
+	return nil
+}
+
+// UpdateUsage updates the usage statistics for a session
+func (r *SQLiteSessionRepository) UpdateUsage(sessionID string, inputTokens, outputTokens int, totalCostUSD float64) error {
+	query := `
+	UPDATE sessions
+	SET input_tokens = ?, output_tokens = ?, total_cost_usd = ?
+	WHERE session_id = ?
+	`
+
+	result, err := r.db.Exec(query, inputTokens, outputTokens, totalCostUSD, sessionID)
+	if err != nil {
+		return fmt.Errorf("failed to update session usage: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return fmt.Errorf("session not found: %s", sessionID)
+	}
+
 	return nil
 }
