@@ -31,6 +31,11 @@
   // App version (injected by Vite from package.json)
   const APP_VERSION = __APP_VERSION__;
 
+  // Parse version for styling (e.g., "1.1.2" -> "1.1" + "2")
+  const versionParts = APP_VERSION.split('.');
+  const versionMajorMinor = versionParts.slice(0, 2).join('.');
+  const versionPatch = versionParts[2] || '0';
+
   // Sidebar reference for refreshing
   let sidebar: { refresh: () => void };
 
@@ -484,6 +489,8 @@
 
           <div class="text-xl font-medium tracking-tight">
             <span class="text-foreground">hal</span><span class="text-muted-foreground">fred</span>
+            <span class="text-muted-foreground"> · </span>
+            <span class="text-foreground">{versionMajorMinor}</span><span class="text-muted-foreground">.{versionPatch}</span>
           </div>
         </div>
 
@@ -593,9 +600,6 @@
       </div>
     {/if}
 
-    <footer class="py-2 px-4 text-center text-[0.625rem] text-muted-foreground font-mono bg-background">
-      v{APP_VERSION}
-    </footer>
   </div>
 </div>
 
