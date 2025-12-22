@@ -79,22 +79,43 @@ git tag v0.x.x && git push origin v0.x.x
 
 ### Backend Structure
 
+**Directory Layout:**
+```
+backend/
+├── handlers/          # HTTP/WebSocket handlers
+├── services/          # Business logic services
+├── repositories/      # Data access layer (repository pattern)
+└── models/            # Data structures and DB initialization
+```
+
 **Key Files:**
-- `main.go` - HTTP server, routes, middleware, service initialization
+- `main.go` - HTTP server, routes, middleware, dependency injection
 - `handlers/websocket.go` - WebSocket upgrade and message routing
 - `handlers/chat.go` - Message processing, session management, memory/SSH injection
 - `handlers/upload.go` - File upload endpoint, MIME validation
-- `handlers/memory.go` - Memory CRUD API
+- `handlers/memory.go` - Memory CRUD API (uses MemoryRepository)
 - `handlers/machines.go` - SSH machines CRUD and connection testing
+- `handlers/search.go` - Full-text search API (uses SearchRepository)
 - `handlers/logs.go` - Real-time logs REST and WebSocket
 - `handlers/update.go` - System update relay to proxy
 - `services/claude_executor.go` - Interface definition, ClaudeResponse types
 - `services/proxy_claude_executor.go` - WebSocket connection to Claude Proxy SDK
-- `services/session.go` - Session CRUD, manages SDK session IDs
+- `services/session.go` - Session management (uses SessionRepository, MessageRepository)
 - `services/logservice.go` - In-memory log buffer with subscribers
 - `services/crypto.go` - AES-256-GCM encryption for SSH credentials
 - `services/ssh.go` - SSH connection testing
-- `models/database.go` - SQLite schema, migrations, CRUD operations
+- `models/database.go` - SQLite initialization and migrations only
+- `models/*.go` - Data structures (Session, Message, MemoryEntry, Machine, ToolCall, SearchResult)
+
+**Repositories** (`repositories/`):
+- `interfaces.go` - All repository interfaces for dependency injection
+- `session_repo.go` - SessionRepository: session CRUD, session ID updates
+- `message_repo.go` - MessageRepository: message persistence
+- `memory_repo.go` - MemoryRepository: memory entries CRUD
+- `machine_repo.go` - MachineRepository: SSH machines with encrypted credentials
+- `tool_call_repo.go` - ToolCallRepository: tool call tracking
+- `settings_repo.go` - SettingsRepository: key-value settings
+- `search_repo.go` - SearchRepository: FTS5 full-text search
 
 **ClaudeExecutor Interface:**
 ```go
