@@ -16,6 +16,7 @@ The codebase is functional but has accumulated technical debt. Key issues:
 | Issue | Impact | Effort | Priority |
 |-------|--------|--------|----------|
 | Split `database.go` into repositories | High | Medium | **P1** |
+| Implement proper database migrations | High | Medium | **P1** |
 | Extract `chat.go` prompt builders | High | Medium | **P1** |
 | Create shared type definitions | Medium | Low | **P1** |
 | Add interfaces for testability | High | Medium | **P2** |
@@ -77,7 +78,236 @@ type MessageRepository interface {
 }
 ```
 
-### 2. Refactor `handlers/chat.go` (696 lines)
+### 2. Implement Proper Database Migrations
+
+**Current State**: Migrations are handled informally with inline `ALTER TABLE` statements that silently fail:
+
+```go
+// models/database.go:134-147 (current approach - problematic)
+alterTableTitle := `ALTER TABLE sessions ADD COLUMN title TEXT DEFAULT '';`
+db.conn.Exec(alterTableTitle)  // Errors silently ignored
+```
+
+**Problems**:
+- No version tracking
+- Silent failures hide real errors
+- No rollback capability
+- Can't verify migration state
+
+**Recommendation**: Use golang-migrate with embedded SQL files:
+
+```
+backend/
+├── internal/
+│   └── database/
+│       ├── db.go              # Connection setup
+│       ├── migrate.go         # Migration runner
+│       └── migrations/
+│           ├── 000001_init_schema.up.sql
+│           ├── 000001_init_schema.down.sql
+│           ├── 000002_add_thinking_role.up.sql
+│           ├── 000002_add_thinking_role.down.sql
+│           └── ...
+```
+
+**Migration Runner Implementation**:
+
+```go
+// internal/database/migrate.go
+package database
+
+import (
+    "database/sql"
+    "embed"
+    "fmt"
+    "log"
+
+    "github.com/golang-migrate/migrate/v4"
+    "github.com/golang-migrate/migrate/v4/database/sqlite"
+    "github.com/golang-migrate/migrate/v4/source/iofs"
+)
+
+//go:embed migrations/*.sql
+var migrationsFS embed.FS
+
+func RunMigrations(db *sql.DB) error {
+    driver, err := sqlite.WithInstance(db, &sqlite.Config{})
+    if err != nil {
+        return fmt.Errorf("create driver: %w", err)
+    }
+
+    source, err := iofs.New(migrationsFS, "migrations")
+    if err != nil {
+        return fmt.Errorf("create source: %w", err)
+    }
+
+    m, err := migrate.NewWithInstance("iofs", source, "sqlite", driver)
+    if err != nil {
+        return fmt.Errorf("create migrator: %w", err)
+    }
+
+    if err := m.Up(); err != nil && err != migrate.ErrNoChange {
+        return fmt.Errorf("run migrations: %w", err)
+    }
+
+    version, dirty, _ := m.Version()
+    log.Printf("Database at migration version %d (dirty: %v)", version, dirty)
+
+    return nil
+}
+```
+
+**Example Migration Files**:
+
+```sql
+-- migrations/000001_init_schema.up.sql
+CREATE TABLE sessions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id TEXT UNIQUE NOT NULL,
+    claude_session_id TEXT DEFAULT '',
+    title TEXT DEFAULT '',
+    model TEXT DEFAULT 'haiku',
+    created_at DATETIME NOT NULL,
+    last_activity DATETIME NOT NULL
+);
+
+CREATE TABLE messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id TEXT NOT NULL,
+    role TEXT NOT NULL CHECK(role IN ('user', 'assistant')),
+    content TEXT NOT NULL,
+    created_at DATETIME NOT NULL,
+    FOREIGN KEY (session_id) REFERENCES sessions(session_id) ON DELETE CASCADE
+);
+
+-- indexes...
+```
+
+```sql
+-- migrations/000001_init_schema.down.sql
+DROP TABLE messages;
+DROP TABLE sessions;
+```
+
+```sql
+-- migrations/000002_add_thinking_role.up.sql
+-- SQLite doesn't support ALTER CHECK, so recreate table
+CREATE TABLE messages_new (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id TEXT NOT NULL,
+    role TEXT NOT NULL CHECK(role IN ('user', 'assistant', 'thinking')),
+    content TEXT NOT NULL,
+    created_at DATETIME NOT NULL,
+    FOREIGN KEY (session_id) REFERENCES sessions(session_id) ON DELETE CASCADE
+);
+
+INSERT INTO messages_new SELECT * FROM messages;
+DROP TABLE messages;
+ALTER TABLE messages_new RENAME TO messages;
+
+CREATE INDEX idx_messages_session_id ON messages(session_id);
+CREATE INDEX idx_messages_created_at ON messages(created_at);
+```
+
+```sql
+-- migrations/000002_add_thinking_role.down.sql
+-- Reverse: remove thinking messages and recreate with old constraint
+DELETE FROM messages WHERE role = 'thinking';
+
+CREATE TABLE messages_new (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id TEXT NOT NULL,
+    role TEXT NOT NULL CHECK(role IN ('user', 'assistant')),
+    content TEXT NOT NULL,
+    created_at DATETIME NOT NULL,
+    FOREIGN KEY (session_id) REFERENCES sessions(session_id) ON DELETE CASCADE
+);
+
+INSERT INTO messages_new SELECT * FROM messages;
+DROP TABLE messages;
+ALTER TABLE messages_new RENAME TO messages;
+```
+
+**SQLite-Specific Considerations**:
+
+SQLite has limitations that affect migrations:
+- No `DROP COLUMN` (until 3.35.0)
+- No `ALTER COLUMN`
+- No `ADD CONSTRAINT`
+
+Workaround pattern for schema changes:
+
+```go
+func migrateWithTableRecreation(tx *sql.Tx, tableName, newSchema, columns string) error {
+    steps := []string{
+        fmt.Sprintf("ALTER TABLE %s RENAME TO %s_old", tableName, tableName),
+        newSchema,
+        fmt.Sprintf("INSERT INTO %s (%s) SELECT %s FROM %s_old", tableName, columns, columns, tableName),
+        fmt.Sprintf("DROP TABLE %s_old", tableName),
+    }
+    for _, sql := range steps {
+        if _, err := tx.Exec(sql); err != nil {
+            return fmt.Errorf("step failed: %s: %w", sql[:50], err)
+        }
+    }
+    return nil
+}
+```
+
+**Alternative: Manual Version Table** (minimal dependencies):
+
+```go
+// For projects that want to avoid external dependencies
+type Migration struct {
+    Version     int
+    Description string
+    Up          func(*sql.Tx) error
+    Down        func(*sql.Tx) error
+}
+
+var migrations = []Migration{
+    {
+        Version:     1,
+        Description: "initial schema",
+        Up:          migrateV1Up,
+        Down:        migrateV1Down,
+    },
+    // ...
+}
+
+func RunMigrations(db *sql.DB) error {
+    // Create version table
+    db.Exec(`CREATE TABLE IF NOT EXISTS schema_migrations (
+        version INTEGER PRIMARY KEY,
+        applied_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`)
+
+    var currentVersion int
+    db.QueryRow("SELECT COALESCE(MAX(version), 0) FROM schema_migrations").Scan(&currentVersion)
+
+    for _, m := range migrations {
+        if m.Version <= currentVersion {
+            continue
+        }
+
+        tx, _ := db.Begin()
+        log.Printf("Applying migration %d: %s", m.Version, m.Description)
+
+        if err := m.Up(tx); err != nil {
+            tx.Rollback()
+            return fmt.Errorf("migration %d failed: %w", m.Version, err)
+        }
+
+        tx.Exec("INSERT INTO schema_migrations (version) VALUES (?)", m.Version)
+        tx.Commit()
+    }
+    return nil
+}
+```
+
+**Key Principle**: When splitting `database.go` into repositories, migrations should be separate. Repositories contain query logic only; migrations handle schema changes independently.
+
+### 3. Refactor `handlers/chat.go` (696 lines)
 
 **Current State**: Single handler mixing prompt building, attachment handling, SSH context, memory injection, and response processing.
 
@@ -131,7 +361,7 @@ func (b *Builder) Build(request MessageRequest) (*BuiltPrompt, error) {
 }
 ```
 
-### 3. Clean Up `main.go` (388 lines)
+### 4. Clean Up `main.go` (388 lines)
 
 **Current Issues**:
 - Inline route handlers instead of delegation
@@ -171,7 +401,7 @@ func RegisterRoutes(app *fiber.App, h *Handlers) {
 }
 ```
 
-### 4. Consolidate Type Definitions
+### 5. Consolidate Type Definitions
 
 **Current Issues**:
 - `Attachment` in `websocket.go`
@@ -203,7 +433,7 @@ type ToolInfo struct {
 }
 ```
 
-### 5. Add Domain Errors
+### 6. Add Domain Errors
 
 **Current State**: Raw `fmt.Errorf` throughout.
 
@@ -239,7 +469,7 @@ func (e *DomainError) WithMessage(msg string) *DomainError {
 }
 ```
 
-### 6. Extract Configuration with Validation
+### 7. Extract Configuration with Validation
 
 ```go
 // config/config.go
@@ -279,7 +509,7 @@ func (c *Config) Validate() error {
 }
 ```
 
-### 7. Add Interfaces for Testability
+### 8. Add Interfaces for Testability
 
 **Current Issue**: Handlers directly depend on `*models.DB`.
 
@@ -798,9 +1028,10 @@ claude-proxy-sdk/
 
 ### Phase 1: Foundation (Week 1-2)
 1. Create `types/` package in backend
-2. Split `models/database.go` into repositories
-3. Add repository interfaces
-4. Create shared frontend types
+2. Implement golang-migrate with initial schema migration
+3. Split `models/database.go` into repositories
+4. Add repository interfaces
+5. Create shared frontend types
 
 ### Phase 2: Core Refactoring (Week 3-4)
 1. Extract prompt building from `chat.go`
@@ -827,7 +1058,8 @@ claude-proxy-sdk/
 2. **Consolidate frontend types** - 1 hour
 3. **Add domain error types** - 1 hour
 4. **Split models into separate files** - 2 hours
-5. **Extract `PromptBuilder` service** - 2 hours
+5. **Add schema_migrations table** - 1 hour (foundation for proper migrations)
+6. **Extract `PromptBuilder` service** - 2 hours
 
 ---
 
