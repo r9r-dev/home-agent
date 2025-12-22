@@ -85,7 +85,10 @@ backend/
 ├── handlers/          # HTTP/WebSocket handlers
 ├── services/          # Business logic services
 ├── repositories/      # Data access layer (repository pattern)
-└── models/            # Data structures and DB initialization
+├── models/            # Data structures
+└── internal/
+    └── database/      # Database connection and migrations (golang-migrate)
+        └── migrations/ # Versioned SQL migration files
 ```
 
 **Key Files:**
@@ -104,8 +107,16 @@ backend/
 - `services/logservice.go` - In-memory log buffer with subscribers
 - `services/crypto.go` - AES-256-GCM encryption for SSH credentials
 - `services/ssh.go` - SSH connection testing
-- `models/database.go` - SQLite initialization and migrations only
+- `internal/database/db.go` - Database connection setup
+- `internal/database/migrate.go` - Migration runner with embedded SQL files
 - `models/*.go` - Data structures (Session, Message, MemoryEntry, Machine, ToolCall, SearchResult)
+
+**Database Migrations:**
+- Uses golang-migrate with embedded SQL files (`//go:embed`)
+- Migrations run automatically on startup
+- Legacy databases (pre-migration) are detected and version is forced to latest
+- Migration files: `internal/database/migrations/000001_*.sql` to `000008_*.sql`
+- Schema tracked in `schema_migrations` table
 
 **Repositories** (`repositories/`):
 - `interfaces.go` - All repository interfaces for dependency injection

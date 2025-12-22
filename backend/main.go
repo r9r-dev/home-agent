@@ -14,6 +14,7 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/recover"
 	"github.com/ronan/home-agent/handlers"
+	"github.com/ronan/home-agent/internal/database"
 	"github.com/ronan/home-agent/models"
 	"github.com/ronan/home-agent/repositories"
 	"github.com/ronan/home-agent/services"
@@ -106,10 +107,12 @@ func main() {
 		log.Fatalf("Failed to ensure directories: %v", err)
 	}
 
-	// Initialize database
-	db, err := models.InitDB(config.DatabasePath)
+	// Initialize database connection
+	db, err := database.New(database.Config{
+		Path: config.DatabasePath,
+	})
 	if err != nil {
-		log.Fatalf("Failed to initialize database: %v", err)
+		log.Fatalf("Failed to connect to database: %v", err)
 	}
 	defer func() {
 		if err := db.Close(); err != nil {
@@ -117,8 +120,13 @@ func main() {
 		}
 	}()
 
+	// Run database migrations
+	if err := db.Migrate(); err != nil {
+		log.Fatalf("Failed to run database migrations: %v", err)
+	}
+
 	// Get the underlying SQL connection for repositories
-	sqlDB := db.GetConnection()
+	sqlDB := db.Conn()
 
 	// Initialize repositories
 	sessionRepo := repositories.NewSessionRepository(sqlDB)
