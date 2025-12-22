@@ -83,6 +83,16 @@ export async function* executePrompt(
     // Permission mode - accept edits without prompting
     permissionMode: "acceptEdits",
 
+    // Sandbox configuration - allow privileged commands
+    sandbox: {
+      // Allow model to request unsandboxed execution via dangerouslyDisableSandbox
+      allowUnsandboxedCommands: true,
+      // Commands that automatically bypass sandbox (e.g., sudo, systemctl)
+      excludedCommands: ["sudo", "systemctl", "apt", "apt-get", "dnf", "yum", "pacman"],
+      // Weaker sandbox for Docker environments
+      enableWeakerNestedSandbox: true,
+    },
+
     // Model selection
     model: mapModel(model),
 
