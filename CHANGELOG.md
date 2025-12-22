@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.1.1 (2025-12-22)
+
+- Remplacement du texte d'attente par une bordure pulsante subtile
+
 ## v1.1.0 (2025-12-22)
 
 - Ajout du suivi de l'utilisation du contexte avec persistence
