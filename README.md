@@ -1,6 +1,6 @@
 # Home Agent
 
-[![Architecture Refactoring](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/r9r-dev/home-agent/main/.github/badges/milestone-1.json)](https://github.com/r9r-dev/home-agent/milestone/1)
+[![Architecture Refactoring](https://img.shields.io/endpoint?style=for-the-badge&url=https://raw.githubusercontent.com/r9r-dev/home-agent/main/.github/badges/milestone-1.json)](https://github.com/r9r-dev/home-agent/milestone/1)
 
 **Assistant domotique personnel propulse par Claude Code**
 
