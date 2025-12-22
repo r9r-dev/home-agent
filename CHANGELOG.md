@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.0.4 (2025-12-22)
+
+- Configuration du sandbox pour autoriser les commandes privilegiées
+- Implémentation des migrations de base de données avec golang-migrate
+- Utilisation d'une barre de progression ASCII pour une meilleure compatibilité
+- Amélioration du badge de jalon avec barre de progression
+- Ajout d'un badge de progression des jalons mis à jour automatiquement
+
 ## v1.0.3 (2025-12-22)
 
 - Implémentation de migrations de base de données appropriées avec golang-migrate
