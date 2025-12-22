@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.0.1 (2025-12-22)
+
+- Refactorisation: encapsulation de ExecutionContext en tant que classe
+- Documentation: ajout de 19 fichiers de problèmes individuels pour les améliorations architecturales
+- Documentation: ajout d'une section sur les migrations de base de données dans l'examen architectural
+- Documentation: ajout d'un examen architectural complet avec recommandations de refactorisation
+
 ## v1.0.0 (2025-12-21)
 
 - Ajout de la recherche textuelle complète dans les conversations
