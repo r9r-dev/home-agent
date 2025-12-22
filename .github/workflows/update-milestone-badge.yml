@@ -1,0 +1,73 @@
+name: Update Milestone Badge
+
+on:
+  issues:
+    types: [opened, closed, reopened, deleted, transferred]
+  workflow_dispatch:
+
+jobs:
+  update-badge:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Get milestone progress
+        id: milestone
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const milestones = await github.rest.issues.listMilestones({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open'
+            });
+
+            // Find milestone 1 (Architecture Refactoring)
+            const milestone = milestones.data.find(m => m.number === 1);
+
+            if (!milestone) {
+              console.log('Milestone 1 not found');
+              return;
+            }
+
+            const total = milestone.open_issues + milestone.closed_issues;
+            const progress = total > 0 ? Math.round((milestone.closed_issues / total) * 100) : 0;
+
+            // Determine color based on progress
+            let color = 'red';
+            if (progress >= 80) color = 'brightgreen';
+            else if (progress >= 60) color = 'green';
+            else if (progress >= 40) color = 'yellow';
+            else if (progress >= 20) color = 'orange';
+
+            core.setOutput('title', milestone.title);
+            core.setOutput('progress', progress);
+            core.setOutput('closed', milestone.closed_issues);
+            core.setOutput('total', total);
+            core.setOutput('color', color);
+
+      - name: Create badge JSON
+        if: steps.milestone.outputs.progress != ''
+        run: |
+          mkdir -p .github/badges
+          cat > .github/badges/milestone-1.json << EOF
+          {
+            "schemaVersion": 1,
+            "label": "Milestone 1",
+            "message": "${{ steps.milestone.outputs.progress }}% (${{ steps.milestone.outputs.closed }}/${{ steps.milestone.outputs.total }})",
+            "color": "${{ steps.milestone.outputs.color }}"
+          }
+          EOF
+
+      - name: Commit badge
+        if: steps.milestone.outputs.progress != ''
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add .github/badges/milestone-1.json
+          git diff --staged --quiet || git commit -m "chore: update milestone 1 badge (${{ steps.milestone.outputs.progress }}%)"
+          git push

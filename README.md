@@ -1,6 +1,8 @@
 # Home Agent
 
-**Assistant domotique personnel propulsé par Claude Code**
+[![Milestone 1 Progress](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/r9r-dev/home-agent/main/.github/badges/milestone-1.json)](https://github.com/r9r-dev/home-agent/milestone/1)
+
+**Assistant domotique personnel propulse par Claude Code**
 
 Home Agent est une interface web auto-hébergée qui transforme Claude Code en assistant domotique intelligent. Contrairement à un simple chatbot, Home Agent peut exécuter des commandes, contrôler vos appareils, analyser des images et interagir avec votre infrastructure.
 
