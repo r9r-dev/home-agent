@@ -43,14 +43,13 @@ go build -o home-agent
 echo -e "${GREEN}Checking frontend dependencies...${NC}"
 cd ../frontend
 if [ ! -d "node_modules" ]; then
-    echo "Installing npm dependencies..."
-    npm install
+    echo "Installing dependencies with bun..."
+    bun install
 fi
 
-# Check Node.js version
-NODE_VERSION=$(node -v | cut -d'v' -f2 | cut -d'.' -f1)
-if [ "$NODE_VERSION" -lt 18 ]; then
-    echo -e "${RED}Error: Node.js 18+ required (found v$NODE_VERSION)${NC}"
+# Check Bun is available
+if ! command -v bun &> /dev/null; then
+    echo -e "${RED}Error: Bun is required. Install it with: curl -fsSL https://bun.sh/install | bash${NC}"
     exit 1
 fi
 
@@ -83,7 +82,7 @@ sleep 2
 # Start frontend dev server
 cd ../frontend
 echo -e "${GREEN}Starting frontend dev server on http://localhost:5173${NC}"
-npm run dev &
+bun run dev &
 FRONTEND_PID=$!
 
 echo ""

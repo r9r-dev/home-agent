@@ -10,7 +10,8 @@ import Fastify from "fastify";
 import { registerWebSocket } from "./websocket.js";
 import { generateTitle } from "./claude.js";
 import { checkForUpdates, updateBackend, updateProxy, type LogEntry } from "./update.js";
-import type { ProxyConfig } from "./types.js";
+import type { ProxyConfig, McpServerConfig } from "./types.js";
+import { setMcpServers } from "./config.js";
 
 // Load configuration from environment
 function loadConfig(): ProxyConfig {
@@ -20,10 +21,25 @@ function loadConfig(): ProxyConfig {
     apiKey: process.env.PROXY_API_KEY,
   };
 
+  // Load MCP servers from environment variable
+  // Format: MCP_SERVERS='{"imagen":{"url":"http://10.0.0.5:30001/sse","transport":"sse"}}'
+  const mcpServersEnv = process.env.MCP_SERVERS;
+  if (mcpServersEnv) {
+    try {
+      const parsed = JSON.parse(mcpServersEnv) as Record<string, McpServerConfig>;
+      config.mcpServers = parsed;
+    } catch (error) {
+      console.error("Failed to parse MCP_SERVERS environment variable:", error);
+    }
+  }
+
   console.log("Configuration loaded:");
   console.log(`  Host: ${config.host}`);
   console.log(`  Port: ${config.port}`);
   console.log(`  API Key: ${config.apiKey ? "configured" : "not configured"}`);
+  if (config.mcpServers) {
+    console.log(`  MCP Servers: ${Object.keys(config.mcpServers).join(", ")}`);
+  }
 
   return config;
 }
@@ -33,6 +49,11 @@ async function main() {
   console.log("Starting Claude Proxy SDK...");
 
   const config = loadConfig();
+
+  // Initialize MCP servers configuration
+  if (config.mcpServers) {
+    setMcpServers(config.mcpServers);
+  }
 
   // Create Fastify server
   const app = Fastify({

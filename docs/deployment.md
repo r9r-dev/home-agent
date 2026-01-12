@@ -8,7 +8,7 @@ Complete guide for deploying Home Agent to production.
 - Domain name configured
 - SSL certificate (Let's Encrypt recommended)
 - Go 1.21+ installed
-- Node.js 18+ installed (for building)
+- Bun installed (for building frontend)
 - Nginx installed
 - Systemd (for service management)
 
@@ -33,11 +33,14 @@ Claude API
 sudo apt update && sudo apt upgrade -y
 
 # Install required packages
-sudo apt install -y nginx certbot python3-certbot-nginx git golang-go nodejs npm
+sudo apt install -y nginx certbot python3-certbot-nginx git golang-go
+
+# Install Bun
+curl -fsSL https://bun.sh/install | bash
 
 # Verify versions
 go version    # Should be 1.21+
-node --version # Should be 18+
+bun --version # Check Bun is installed
 ```
 
 ### 2. Create Deployment User
@@ -62,8 +65,8 @@ cd home-agent
 
 # Build frontend
 cd frontend
-npm install
-npm run build
+bun install
+bun run build
 
 # Build backend
 cd ../backend
@@ -244,8 +247,8 @@ git pull
 
 # Rebuild frontend
 cd frontend
-npm install
-npm run build
+bun install
+bun run build
 
 # Rebuild backend
 cd ../backend
@@ -490,7 +493,7 @@ cd /opt/home-agent/home-agent
 git checkout <previous-commit>
 
 # Rebuild
-cd frontend && npm run build
+cd frontend && bun run build
 cd ../backend && go build -o home-agent
 
 # Restore database

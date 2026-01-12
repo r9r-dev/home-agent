@@ -5,7 +5,7 @@ This document provides testing procedures to ensure the Home Agent application w
 ## Pre-Testing Checklist
 
 - [ ] Backend built successfully (`go build` in backend/)
-- [ ] Frontend dependencies installed (`npm install` in frontend/)
+- [ ] Frontend dependencies installed (`bun install` in frontend/)
 - [ ] Environment variables configured (`.env` file)
 - [ ] Port 8080 available (backend)
 - [ ] Port 5173 available (frontend dev server)
@@ -16,7 +16,7 @@ This document provides testing procedures to ensure the Home Agent application w
 
 ```bash
 cd frontend
-npm run check
+bun run check
 ```
 
 Expected: No TypeScript errors
@@ -25,7 +25,7 @@ Expected: No TypeScript errors
 
 ```bash
 cd frontend
-npm run build
+bun run build
 ```
 
 Expected: Build succeeds, outputs to `backend/public/`
@@ -45,7 +45,7 @@ Expected: Binary `home-agent` created without errors
 
 **Steps:**
 1. Start backend: `cd backend && go run main.go`
-2. Start frontend: `cd frontend && npm run dev`
+2. Start frontend: `cd frontend && bun run dev`
 3. Open browser to `http://localhost:5173`
 
 **Expected Results:**
@@ -163,7 +163,7 @@ Expected: Binary `home-agent` created without errors
 ### Test 10: Production Build
 
 **Steps:**
-1. Build frontend: `cd frontend && npm run build`
+1. Build frontend: `cd frontend && bun run build`
 2. Start backend: `cd backend && ./home-agent`
 3. Open browser to `http://localhost:8080`
 
@@ -261,13 +261,13 @@ Test in multiple browsers:
 
 ```bash
 # Check TypeScript errors
-npm run check
+bun run check
 
 # Check build process
-npm run build -- --debug
+bun run build -- --debug
 
 # View Vite server logs
-npm run dev -- --debug
+bun run dev -- --debug
 ```
 
 ### Backend Issues

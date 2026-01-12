@@ -50,11 +50,19 @@ export interface ProxyResponse {
   usage?: UsageInfo;
 }
 
+// MCP Server configuration (SSE transport)
+export interface McpServerConfig {
+  url: string;
+  transport: "sse";
+  type?: "http";  // For SDK compatibility
+}
+
 // Configuration
 export interface ProxyConfig {
   port: number;
   host: string;
   apiKey?: string;
+  mcpServers?: Record<string, McpServerConfig>;
 }
 
 // Hook event types

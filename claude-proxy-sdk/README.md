@@ -9,8 +9,8 @@ curl -fsSL https://raw.githubusercontent.com/r9r-dev/home-agent/main/claude-prox
 ```
 
 Le script:
-- Installe Node.js 24+ si necessaire
-- Telecharge et compile le projet
+- Installe Bun si necessaire
+- Telecharge le projet
 - Cree un service systemd
 - Genere une cle API
 - Demarre le service
@@ -25,7 +25,7 @@ curl -fsSL https://raw.githubusercontent.com/r9r-dev/home-agent/main/claude-prox
 
 ### Prerequis
 
-- Node.js >= 24.0.0
+- Bun (https://bun.sh)
 - Claude Code CLI installe (`claude --version`)
 - Authentification configuree (cle API ou OAuth, voir section Authentification)
 
@@ -37,16 +37,13 @@ git clone https://github.com/r9r-dev/home-agent.git
 cd home-agent/claude-proxy-sdk
 
 # Installer les dependances
-npm install
+bun install
 
-# Compiler
-npm run build
-
-# Demarrer en mode developpement
-npm run dev
+# Demarrer en mode developpement (watch mode)
+bun run dev
 
 # Ou demarrer en production
-npm start
+bun start
 ```
 
 ## Avantages par rapport au proxy Go
@@ -61,7 +58,7 @@ npm start
 
 ## Prerequis
 
-- Node.js >= 24.0.0
+- Bun (https://bun.sh)
 - Claude Code CLI installe (`claude --version`)
 - Authentification configuree (voir section suivante)
 
@@ -106,7 +103,7 @@ cat ~/.claude/.credentials.json
 
 ```bash
 cd claude-proxy-sdk
-npm install
+bun install
 ```
 
 ## Configuration
@@ -123,12 +120,11 @@ Variables d'environnement:
 ## Utilisation
 
 ```bash
-# Développement
-npm run dev
+# Developpement (watch mode)
+bun run dev
 
 # Production
-npm run build
-npm start
+bun start
 ```
 
 ## Endpoints
@@ -189,10 +185,10 @@ Exemple actuel: logging des commandes Bash et modifications de fichiers.
 
 ## Migration depuis le proxy Go
 
-1. Arrêter le service `claude-proxy` Go
+1. Arreter le service `claude-proxy` Go
 2. Configurer les variables d'environnement
-3. Lancer `npm start` dans `claude-proxy-sdk/`
-4. Le backend Home Agent se connecte de la même façon
+3. Lancer `bun start` dans `claude-proxy-sdk/`
+4. Le backend Home Agent se connecte de la meme facon
 
 Le protocole WebSocket est 100% compatible.
 

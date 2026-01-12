@@ -43,7 +43,7 @@ go run main.go
 
 # Frontend only (requires backend running)
 cd frontend
-npm run dev
+bun run dev
 ```
 
 ### Building
@@ -56,7 +56,7 @@ npm run dev
 
 # Frontend
 cd frontend
-npm run build
+bun run build
 
 # Backend
 cd backend
@@ -68,7 +68,7 @@ go build
 ```bash
 # Frontend type check
 cd frontend
-npm run check
+bun run check
 
 # Backend test
 cd backend
@@ -82,7 +82,7 @@ go test ./...
 1. Create component in `frontend/src/components/`
 2. Import in parent component
 3. Add types if needed
-4. Test with `npm run check`
+4. Test with `bun run check`
 
 Example:
 ```typescript
@@ -240,7 +240,7 @@ Use `wscat` to test WebSocket:
 
 ```bash
 # Install
-npm install -g wscat
+bun install -g wscat
 
 # Connect
 wscat -c ws://localhost:8080/ws
@@ -256,8 +256,8 @@ wscat -c ws://localhost:8080/ws
 Frontend:
 ```bash
 cd frontend
-npm update
-npm audit fix
+bun update
+bun audit
 ```
 
 Backend:
@@ -365,7 +365,7 @@ git push origin feature/new-feature
 
 ### "Frontend not loading"
 
-1. Check `npm install` completed
+1. Check `bun install` completed
 2. Verify Node.js version (18+)
 3. Clear `node_modules` and reinstall
 4. Check browser console for errors
@@ -379,7 +379,7 @@ git push origin feature/new-feature
 
 ### "Types not working"
 
-1. Run `npm run check`
+1. Run `bun run check`
 2. Check `tsconfig.json`
 3. Verify all `.d.ts` files
 4. Restart TypeScript server in IDE

@@ -4,7 +4,9 @@ This file provides guidance to Claude Code when working with the Claude Proxy SD
 
 ## Project Overview
 
-Claude Proxy SDK is a TypeScript/Node.js service that bridges the Go backend with the Claude Agent SDK. It exposes a WebSocket server that handles streaming Claude API requests on behalf of containerized deployments.
+Claude Proxy SDK is a TypeScript service that bridges the Go backend with the Claude Agent SDK. It exposes a WebSocket server that handles streaming Claude API requests on behalf of containerized deployments.
+
+**Runtime**: Bun (executes TypeScript natively, no compilation needed)
 
 **Claude Agent SDK Documentation**: https://platform.claude.com/docs/en/agent-sdk/overview
 
@@ -12,22 +14,21 @@ Claude Proxy SDK is a TypeScript/Node.js service that bridges the Go backend wit
 
 ```bash
 # Development (watch mode with hot reload)
-npm run dev
+bun run dev
 
-# Build TypeScript to JavaScript
-npm run build
-
-# Run compiled output
-npm start
+# Run in production
+bun start
 
 # Type checking without emitting
-npm run typecheck
+bun run typecheck
 ```
+
+Note: No build step required - Bun executes TypeScript directly.
 
 ## Architecture
 
 ### Stack
-- **Runtime**: Node.js 24+ with ES modules
+- **Runtime**: Bun with native TypeScript execution
 - **Framework**: Fastify 5 for HTTP/WebSocket server
 - **SDK**: @anthropic-ai/claude-agent-sdk for Claude integration
 - **Language**: TypeScript 5.7 with strict mode
@@ -42,21 +43,15 @@ npm run typecheck
 
 ### Dependencies
 
-**Production Dependencies** (required for all builds including production):
 - `@anthropic-ai/claude-agent-sdk` - Claude API integration
 - `@fastify/cors` - CORS middleware
 - `@fastify/websocket` - WebSocket support
-- `@types/node` - Node.js type definitions (required during TypeScript compilation)
-- `@types/ws` - WebSocket type definitions (required during TypeScript compilation)
+- `@types/node` - Node.js type definitions
+- `@types/ws` - WebSocket type definitions
 - `fastify` - HTTP/WebSocket server framework
 - `pino-pretty` - Log formatting
-- `typescript` - TypeScript compiler
+- `typescript` - For type checking only
 - `ws` - WebSocket implementation
-
-**Development Dependencies**:
-- `tsx` - TypeScript runner for development
-
-Note: `@types/node` and `@types/ws` are in dependencies rather than devDependencies because they are required during the TypeScript compilation step (`npm run build`), which occurs during production update procedures.
 
 ## Environment Variables
 
@@ -108,26 +103,23 @@ ANTHROPIC_API_KEY=...       # Claude API authentication (sk-ant-... or OAuth tok
 - Target: ES2022
 - Module Resolution: NodeNext (ESM)
 - Strict mode enabled
-- Generates source maps and declaration files
-- Type checking includes Node.js types explicitly
+- tsconfig.json kept for type checking only (`bun run typecheck`)
 
-### Production Builds
+### Production Updates
 When the system updates the proxy (via the update endpoint), it performs:
-1. `npm install` - installs all dependencies (including type definitions)
-2. `npm run build` - compiles TypeScript to JavaScript
-3. Service restart - loads the compiled JavaScript
+1. `bun install` - installs all dependencies
+2. Service restart - Bun loads TypeScript directly
 
-The type definitions must be available during the build step, so they are production dependencies.
+No compilation step required.
 
 ## Deployment
 
-The proxy typically runs alongside the backend in a separate container or on the host machine:
+The proxy typically runs alongside the backend on the host machine:
 
 ```bash
-docker run -d -p 9090:9090 \
-  -e ANTHROPIC_API_KEY=sk-ant-... \
-  -e API_KEY=your-proxy-key \
-  claude-proxy-sdk
+cd claude-proxy-sdk
+bun install
+bun start
 ```
 
 Backend connects via: `CLAUDE_PROXY_URL=ws://proxy-host:9090`

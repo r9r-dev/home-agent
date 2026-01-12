@@ -7,6 +7,7 @@ import { query, type Options, type SDKMessage, type PreToolUseHookInput, type Po
 import type { ProxyRequest, ProxyResponse, ToolCallInfo, UsageInfo } from "./types.js";
 import { auditLog } from "./hooks/audit.js";
 import { ExecutionContext } from "./context/ExecutionContext.js";
+import { getMcpServers } from "./config.js";
 
 // System prompt for Home Agent
 const SYSTEM_PROMPT = `You are a helpful personal assistant named Halfred, running on the user's home server.
@@ -18,6 +19,8 @@ You have access to various tools:
 - **Web search**: Search the internet for current information (weather, news, etc.)
 - **Web fetch**: Retrieve content from web pages
 - **File operations**: Read, write, and edit files
+- **Image generation**: Generate images from text descriptions using the generate_image tool
+- **Image editing**: Edit existing images using the edit_image tool
 
 ## What you can help with
 - General questions (weather, facts, recommendations, etc.)
@@ -25,7 +28,15 @@ You have access to various tools:
 - Container management (Docker)
 - System troubleshooting
 - Network configuration
+- Image generation and editing
 - Any other task the user requests
+
+## Image generation guidelines
+When asked to generate an image:
+1. Use the generate_image tool with a detailed prompt
+2. The tool returns a base64 PNG image
+3. Save the image using the Write tool to /workspace/imagen/ directory with a descriptive filename
+4. Display the image path in your response so the user can view it
 
 ## Guidelines
 - For questions requiring current information (weather, news, etc.), use the WebSearch tool
@@ -72,13 +83,30 @@ export async function* executePrompt(
     systemPrompt += `\n\n## Instructions personnalisees\n${custom_instructions}`;
   }
 
+  // Get MCP servers configuration
+  const mcpServers = getMcpServers();
+
   // Build Agent SDK options
   const options: Options = {
     // Tools available to the agent
     tools: ["Read", "Write", "Edit", "Bash", "Glob", "Grep", "WebSearch", "WebFetch"],
 
-    // Auto-allow these tools
-    allowedTools: ["Read", "Write", "Edit", "Bash", "Glob", "Grep", "WebSearch", "WebFetch"],
+    // Auto-allow these tools (including MCP tools if configured)
+    allowedTools: [
+      "Read", "Write", "Edit", "Bash", "Glob", "Grep", "WebSearch", "WebFetch",
+      // Allow all tools from MCP servers
+      ...(mcpServers ? Object.keys(mcpServers).map(name => `mcp__${name}__*`) : []),
+    ],
+
+    // MCP servers configuration
+    ...(mcpServers && {
+      mcpServers: Object.fromEntries(
+        Object.entries(mcpServers).map(([name, config]) => [
+          name,
+          { type: "http" as const, url: config.url, transport: config.transport },
+        ])
+      ),
+    }),
 
     // Permission mode - accept edits without prompting
     permissionMode: "acceptEdits",

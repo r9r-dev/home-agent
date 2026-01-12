@@ -17,7 +17,6 @@ GITHUB_REPO="r9r-dev/home-agent"
 SERVICE_NAME="claude-proxy-sdk"
 INSTALL_DIR="/opt/claude-proxy-sdk"
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
-NODE_MIN_VERSION="24"
 
 # Global variable to store the API key
 INSTALLED_API_KEY=""
@@ -41,6 +40,7 @@ banner() {
     echo "  ╔═══════════════════════════════════════╗"
     echo "  ║     Claude Proxy SDK Installer        ║"
     echo "  ║   TypeScript + Claude Agent SDK       ║"
+    echo "  ║             Powered by Bun            ║"
     echo "  ╚═══════════════════════════════════════╝"
     echo ""
 }
@@ -52,49 +52,41 @@ check_root() {
     fi
 }
 
-# Check Node.js version
-check_node() {
-    if ! command -v node &> /dev/null; then
-        warn "Node.js not found"
-        install_node
+# Check Bun
+check_bun() {
+    if ! command -v bun &> /dev/null; then
+        warn "Bun not found"
+        install_bun
         return
     fi
 
-    local version=$(node -v | sed 's/v//' | cut -d. -f1)
-    if [[ "$version" -lt "$NODE_MIN_VERSION" ]]; then
-        warn "Node.js version $version is too old (need >= $NODE_MIN_VERSION)"
-        install_node
-        return
-    fi
-
-    success "Node.js $(node -v) found"
+    success "Bun $(bun --version) found"
 }
 
-# Install Node.js
-install_node() {
-    info "Installing Node.js ${NODE_MIN_VERSION}.x..."
+# Install Bun
+install_bun() {
+    info "Installing Bun..."
 
-    # Detect package manager
-    if command -v apt-get &> /dev/null; then
-        # Debian/Ubuntu
-        curl -fsSL https://deb.nodesource.com/setup_${NODE_MIN_VERSION}.x | bash -
-        apt-get install -y nodejs
-    elif command -v dnf &> /dev/null; then
-        # Fedora/RHEL
-        curl -fsSL https://rpm.nodesource.com/setup_${NODE_MIN_VERSION}.x | bash -
-        dnf install -y nodejs
-    elif command -v yum &> /dev/null; then
-        # CentOS/older RHEL
-        curl -fsSL https://rpm.nodesource.com/setup_${NODE_MIN_VERSION}.x | bash -
-        yum install -y nodejs
-    elif command -v pacman &> /dev/null; then
-        # Arch Linux
-        pacman -S --noconfirm nodejs npm
+    # Get the user who ran sudo (install for them, not root)
+    local run_user="${SUDO_USER:-root}"
+    local run_home=$(eval echo ~$run_user)
+
+    # Install Bun for the user
+    if [[ "$run_user" != "root" ]]; then
+        su - "$run_user" -c 'curl -fsSL https://bun.sh/install | bash'
+        # Add to PATH for this session
+        export PATH="$run_home/.bun/bin:$PATH"
     else
-        error "Unable to install Node.js. Please install Node.js >= ${NODE_MIN_VERSION} manually"
+        curl -fsSL https://bun.sh/install | bash
+        export PATH="/root/.bun/bin:$PATH"
     fi
 
-    success "Node.js installed: $(node -v)"
+    # Create symlink for system-wide access
+    if [[ -f "$run_home/.bun/bin/bun" ]]; then
+        ln -sf "$run_home/.bun/bin/bun" /usr/local/bin/bun
+    fi
+
+    success "Bun installed: $(bun --version)"
 }
 
 # Check dependencies
@@ -135,33 +127,23 @@ download_source() {
     success "Source code installed"
 }
 
-# Install npm dependencies and build
-install_npm() {
-    info "Installing npm dependencies..."
+# Install dependencies with Bun
+install_deps() {
+    info "Installing dependencies with Bun..."
     cd "${INSTALL_DIR}"
 
-    # Install production dependencies
-    npm install --omit=dev
+    # Install all dependencies
+    bun install
 
-    # Install dev dependencies temporarily for build
-    npm install
-
-    # Build TypeScript
-    info "Building TypeScript..."
-    npm run build
-
-    # Remove dev dependencies
-    npm prune --omit=dev
-
-    # IMPORTANT: Fix ownership AFTER npm install/build
-    # npm runs as root (via sudo) and creates files owned by root
+    # IMPORTANT: Fix ownership AFTER bun install
+    # bun runs as root (via sudo) and creates files owned by root
     # The service user needs to own these files for self-updates
     local run_user="${SUDO_USER:-root}"
     local run_group=$(id -gn "$run_user" 2>/dev/null || echo "root")
     info "Setting ownership to ${run_user}:${run_group}..."
     chown -R "${run_user}:${run_group}" "${INSTALL_DIR}"
 
-    success "Build complete"
+    success "Dependencies installed"
 }
 
 # Extract existing API key from service file
@@ -174,6 +156,23 @@ get_existing_api_key() {
     fi
 }
 
+# Get bun path
+get_bun_path() {
+    local run_user="${SUDO_USER:-root}"
+    local run_home=$(eval echo ~$run_user)
+
+    # Check common locations
+    if [[ -f "/usr/local/bin/bun" ]]; then
+        echo "/usr/local/bin/bun"
+    elif [[ -f "$run_home/.bun/bin/bun" ]]; then
+        echo "$run_home/.bun/bin/bun"
+    elif command -v bun &> /dev/null; then
+        which bun
+    else
+        echo "/usr/local/bin/bun"
+    fi
+}
+
 # Install systemd service
 install_service() {
     info "Installing systemd service..."
@@ -181,6 +180,8 @@ install_service() {
     # Get the user who ran sudo
     local run_user="${SUDO_USER:-root}"
     local run_group=$(id -gn "$run_user" 2>/dev/null || echo "root")
+    local run_home=$(eval echo ~$run_user)
+    local bun_path=$(get_bun_path)
 
     # Check for existing API key
     local existing_key=$(get_existing_api_key)
@@ -205,13 +206,14 @@ Type=simple
 User=${run_user}
 Group=${run_group}
 WorkingDirectory=${INSTALL_DIR}
-ExecStart=/usr/bin/node ${INSTALL_DIR}/dist/index.js
+ExecStart=${bun_path} ${INSTALL_DIR}/src/index.ts
 
 # Environment
 Environment="PROXY_PORT=9090"
 Environment="PROXY_HOST=0.0.0.0"
 Environment="PROXY_API_KEY=${INSTALLED_API_KEY}"
-Environment="NODE_ENV=production"
+Environment="HOME=${run_home}"
+Environment="PATH=${run_home}/.bun/bin:/usr/local/bin:/usr/bin:/bin"
 
 # Restart policy
 Restart=always
@@ -338,9 +340,9 @@ install() {
         systemctl stop "${SERVICE_NAME}"
     fi
 
-    # Download and build
+    # Download and install
     download_source
-    install_npm
+    install_deps
 
     # Install or update service
     if [[ "$is_upgrade" == false ]] || [[ ! -f "${SERVICE_FILE}" ]]; then
@@ -395,7 +397,7 @@ done
 banner
 check_root
 check_deps
-check_node
+check_bun
 
 if [[ "$UNINSTALL" == true ]]; then
     uninstall

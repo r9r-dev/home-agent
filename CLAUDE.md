@@ -18,16 +18,16 @@ The backend connects to a Claude Proxy SDK service via WebSocket. The proxy runs
 
 # Or manually:
 cd backend && go run main.go          # Backend on :8080
-cd frontend && npm run dev            # Frontend on :5173 (proxies /ws to backend)
+cd frontend && bun run dev            # Frontend on :5173 (proxies /ws to backend)
 
 # Build frontend (outputs to backend/public/)
-cd frontend && npm run build
+cd frontend && bun run build
 
 # Build backend
 cd backend && go build -o home-agent .
 
 # Type check frontend
-cd frontend && npm run check
+cd frontend && bun run check
 
 # Run backend tests
 cd backend && go test ./...
@@ -36,7 +36,7 @@ cd backend && go test ./...
 container build -t home-agent .
 
 # Run Claude Proxy SDK locally for development
-cd claude-proxy-sdk && npm run dev
+cd claude-proxy-sdk && bun run dev
 
 # Test backend against local proxy
 cd backend && CLAUDE_PROXY_URL=ws://localhost:9090 go run .
@@ -51,7 +51,7 @@ git tag v0.x.x && git push origin v0.x.x
 
 1. **Backend** (`backend/`) - Go + Fiber HTTP/WebSocket server
 2. **Frontend** (`frontend/`) - Svelte 5 SPA with TypeScript, Tailwind CSS v4, shadcn-svelte
-3. **Claude Proxy SDK** (`claude-proxy-sdk/`) - TypeScript/Node.js service using Claude Agent SDK
+3. **Claude Proxy SDK** (`claude-proxy-sdk/`) - TypeScript service using Claude Agent SDK (runs on Bun)
 
 ### Frontend Structure
 
@@ -204,7 +204,7 @@ ClaudeResponse types: `chunk`, `thinking`, `thinking_end`, `done`, `error`, `ses
 ### System Updates
 - Check versions via GitHub Releases API
 - Update backend: `docker compose pull && up -d`
-- Update proxy: git clone + npm build + service restart
+- Update proxy: git clone + bun install + service restart
 - Dual log panels with real-time streaming
 - Auto-reconnection during backend restart
 
@@ -345,7 +345,7 @@ The Docker image requires connection to a Claude Proxy SDK service on the host:
 
 ```bash
 # 1. Run proxy on host
-cd claude-proxy-sdk && npm install && npm start
+cd claude-proxy-sdk && bun install && bun start
 
 # 2. Run container
 container run -d -p 8080:8080 \

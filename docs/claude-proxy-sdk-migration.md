@@ -144,7 +144,7 @@ permissionMode: "acceptEdits"
 
 ```bash
 cd claude-proxy-sdk
-npm install
+bun install
 ```
 
 ### Étape 2: Configuration
@@ -158,7 +158,7 @@ export PROXY_API_KEY=your-key  # optionnel
 ### Étape 3: Test
 
 ```bash
-npm run dev
+bun run dev
 # Vérifier http://localhost:9090/health
 ```
 
@@ -175,7 +175,7 @@ systemctl stop claude-proxy
 
 Option B: Exécuter en parallèle sur un autre port
 ```bash
-PROXY_PORT=9091 npm start
+PROXY_PORT=9091 bun start
 # Mettre à jour CLAUDE_PROXY_URL dans Home Agent
 ```
 

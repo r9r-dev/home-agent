@@ -25,13 +25,13 @@ Modern web interface for interacting with Claude Code via WebSocket.
 
 ### Prerequisites
 
-- Node.js 18+ and npm
+- Bun (https://bun.sh)
 - Backend server running on port 8080 (or configure via environment variable)
 
 ### Installation
 
 ```bash
-npm install
+bun install
 ```
 
 ### Configuration
@@ -53,7 +53,7 @@ VITE_WS_URL=ws://localhost:8080/ws
 Start the development server:
 
 ```bash
-npm run dev
+bun run dev
 ```
 
 The app will be available at `http://localhost:5173` (or another port if 5000 is in use).
@@ -61,7 +61,7 @@ The app will be available at `http://localhost:5173` (or another port if 5000 is
 ### Build for Production
 
 ```bash
-npm run build
+bun run build
 ```
 
 The built files will be in the `dist/` directory.
@@ -69,7 +69,7 @@ The built files will be in the `dist/` directory.
 ### Preview Production Build
 
 ```bash
-npm run preview
+bun run preview
 ```
 
 ## Project Structure

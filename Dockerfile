@@ -3,7 +3,7 @@
 # Claude CLI is NOT included - use CLAUDE_PROXY_URL to connect to host proxy
 
 # Stage 1a: Build frontend (runs in parallel with backend)
-FROM node:20-alpine AS frontend-builder
+FROM oven/bun:1-alpine AS frontend-builder
 
 # Version from git tag (passed via --build-arg)
 ARG APP_VERSION=dev
@@ -11,14 +11,14 @@ ARG APP_VERSION=dev
 WORKDIR /app/frontend
 
 # Copy frontend package files
-COPY frontend/package*.json ./
-RUN --mount=type=cache,target=/root/.npm npm ci
+COPY frontend/package.json frontend/bun.lock* ./
+RUN --mount=type=cache,target=/root/.bun/install/cache bun install --frozen-lockfile
 
 # Copy frontend source
 COPY frontend/ ./
 
 # Build frontend with version (outputs to ../backend/public)
-RUN APP_VERSION=${APP_VERSION} npm run build
+RUN APP_VERSION=${APP_VERSION} bun run build
 
 # Stage 1b: Build backend (runs in parallel with frontend)
 FROM golang:1.24-alpine AS backend-builder
