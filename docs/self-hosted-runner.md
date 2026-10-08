@@ -40,7 +40,7 @@ tar xzf ./actions-runner-linux-x64-2.321.0.tar.gz
 
 ```bash
 # Token is provided by GitHub in the setup page
-./config.sh --url https://github.com/r9r-dev/home-agent --token YOUR_TOKEN
+./config.sh --url https://github.com/ronalove/home-agent --token YOUR_TOKEN
 ```
 
 When prompted:

@@ -11,7 +11,7 @@ import { fileURLToPath } from "url";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 // Configuration
-const GITHUB_REPO = "r9r-dev/home-agent";
+const GITHUB_REPO = "ronalove/home-agent";
 const GITHUB_API_URL = `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`;
 const COMPOSE_PATH = "/home/share/docker/dockge/stacks/home-agent";
 

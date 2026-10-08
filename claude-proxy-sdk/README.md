@@ -5,7 +5,7 @@ Remplacement du proxy Claude Code basé sur Go par une implémentation TypeScrip
 ## Installation rapide (Linux)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/r9r-dev/home-agent/main/claude-proxy-sdk/install.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/ronalove/home-agent/main/claude-proxy-sdk/install.sh | sudo bash
 ```
 
 Le script:
@@ -18,7 +18,7 @@ Le script:
 ### Desinstallation
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/r9r-dev/home-agent/main/claude-proxy-sdk/install.sh | sudo bash -s -- --uninstall
+curl -fsSL https://raw.githubusercontent.com/ronalove/home-agent/main/claude-proxy-sdk/install.sh | sudo bash -s -- --uninstall
 ```
 
 ## Installation manuelle
@@ -33,7 +33,7 @@ curl -fsSL https://raw.githubusercontent.com/r9r-dev/home-agent/main/claude-prox
 
 ```bash
 # Cloner le projet
-git clone https://github.com/r9r-dev/home-agent.git
+git clone https://github.com/ronalove/home-agent.git
 cd home-agent/claude-proxy-sdk
 
 # Installer les dependances

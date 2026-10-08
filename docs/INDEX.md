@@ -32,7 +32,7 @@ cd backend && go run main.go  # Backend only
 ### Docker
 
 ```bash
-docker pull ghcr.io/r9r-dev/home-agent:latest
+docker pull ghcr.io/ronalove/home-agent:latest
 docker compose up -d
 ```
 

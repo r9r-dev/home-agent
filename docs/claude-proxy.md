@@ -39,7 +39,7 @@ The Claude Proxy service allows Home Agent running in Docker to access Claude CL
 Install or update Claude Proxy with a single command:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/r9r-dev/home-agent/main/claude-proxy/install.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/ronalove/home-agent/main/claude-proxy/install.sh | sudo bash
 ```
 
 The installer will:
@@ -70,13 +70,13 @@ At the end of installation, you'll see:
 Install a specific version:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/r9r-dev/home-agent/main/claude-proxy/install.sh | sudo bash -s -- --version v1.0.0
+curl -fsSL https://raw.githubusercontent.com/ronalove/home-agent/main/claude-proxy/install.sh | sudo bash -s -- --version v1.0.0
 ```
 
 Uninstall:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/r9r-dev/home-agent/main/claude-proxy/install.sh | sudo bash -s -- --uninstall
+curl -fsSL https://raw.githubusercontent.com/ronalove/home-agent/main/claude-proxy/install.sh | sudo bash -s -- --uninstall
 ```
 
 ### Manual Install (From Source)

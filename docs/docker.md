@@ -409,9 +409,9 @@ This project uses GitHub Actions for CI/CD with automatic Docker image publishin
 - Triggers on: push of tags matching `v*`
 - Builds and pushes Docker image to ghcr.io
 - Generated tags for `v1.2.3`:
-  - `ghcr.io/r9r-dev/home-agent:1.2.3`
-  - `ghcr.io/r9r-dev/home-agent:1.2`
-  - `ghcr.io/r9r-dev/home-agent:latest`
+  - `ghcr.io/ronalove/home-agent:1.2.3`
+  - `ghcr.io/ronalove/home-agent:1.2`
+  - `ghcr.io/ronalove/home-agent:latest`
 
 ### Creating a Release
 
@@ -427,10 +427,10 @@ The release workflow will automatically build and push the Docker image.
 
 ```bash
 # Pull latest
-docker pull ghcr.io/r9r-dev/home-agent:latest
+docker pull ghcr.io/ronalove/home-agent:latest
 
 # Pull specific version
-docker pull ghcr.io/r9r-dev/home-agent:1.0.0
+docker pull ghcr.io/ronalove/home-agent:1.0.0
 ```
 
 ## Production Deployment
@@ -442,7 +442,7 @@ Create a `docker-compose.yml` on your server (do not commit this file as it cont
 ```yaml
 services:
   home-agent:
-    image: ghcr.io/r9r-dev/home-agent:latest
+    image: ghcr.io/ronalove/home-agent:latest
     container_name: home-agent
     volumes:
       - /path/to/data:/data

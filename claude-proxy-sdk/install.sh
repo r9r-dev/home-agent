@@ -4,7 +4,7 @@
 # Install or update Claude Proxy SDK (TypeScript) service on Linux
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/r9r-dev/home-agent/main/claude-proxy-sdk/install.sh | sudo bash
+#   curl -fsSL https://raw.githubusercontent.com/ronalove/home-agent/main/claude-proxy-sdk/install.sh | sudo bash
 #
 # Or with options:
 #   curl -fsSL ... | sudo bash -s -- --uninstall
@@ -13,7 +13,7 @@
 set -e
 
 # Configuration
-GITHUB_REPO="r9r-dev/home-agent"
+GITHUB_REPO="ronalove/home-agent"
 SERVICE_NAME="claude-proxy-sdk"
 INSTALL_DIR="/opt/claude-proxy-sdk"
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"

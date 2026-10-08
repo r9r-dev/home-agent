@@ -1,6 +1,6 @@
 # Home Agent
 
-[![Architecture Refactoring](https://img.shields.io/endpoint?style=for-the-badge&url=https://raw.githubusercontent.com/r9r-dev/home-agent/main/.github/badges/milestone-1.json)](https://github.com/r9r-dev/home-agent/milestone/1)
+[![Architecture Refactoring](https://img.shields.io/endpoint?style=for-the-badge&url=https://raw.githubusercontent.com/ronalove/home-agent/main/.github/badges/milestone-1.json)](https://github.com/ronalove/home-agent/milestone/1)
 
 **Assistant domotique personnel propulse par Claude Code**
 
@@ -28,19 +28,19 @@ Home Agent est une interface web auto-hébergée qui transforme Claude Code en a
 | | Intégration caméras |
 | | Mode projet avec contexte |
 
-Voir les [issues GitHub](https://github.com/r9r-dev/home-agent/issues) pour la roadmap complète.
+Voir les [issues GitHub](https://github.com/ronalove/home-agent/issues) pour la roadmap complète.
 
 ## Démarrage rapide
 
 ### Avec Docker
 
 ```bash
-docker pull ghcr.io/r9r-dev/home-agent:latest
+docker pull ghcr.io/ronalove/home-agent:latest
 docker run -d -p 8080:8080 \
   -e CLAUDE_PROXY_URL=http://HOST_IP:9090 \
   -e CLAUDE_PROXY_KEY=your_key \
   -v homeagent-data:/app/data \
-  ghcr.io/r9r-dev/home-agent:latest
+  ghcr.io/ronalove/home-agent:latest
 ```
 
 > **Note** : L'image Docker nécessite un [Claude Proxy](docs/claude-proxy.md) sur l'hôte pour exécuter Claude Code.
@@ -48,7 +48,7 @@ docker run -d -p 8080:8080 \
 ### Sans Docker
 
 ```bash
-git clone https://github.com/r9r-dev/home-agent.git
+git clone https://github.com/ronalove/home-agent.git
 cd home-agent
 cp .env.example .env
 # Configurer ANTHROPIC_API_KEY dans .env
